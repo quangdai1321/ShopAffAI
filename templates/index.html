@@ -215,7 +215,11 @@
           </div>
           <div class="mt-8">
             <label>Link affiliate của bạn</label>
-            <input type="text" id="affiliate-link" placeholder="https://s.shopee.vn/xxxxxxxxx" />
+            <div class="flex gap-8">
+              <input type="text" id="affiliate-link" placeholder="https://s.shopee.vn/xxxxxxxxx" style="flex:1" />
+              <button class="btn btn-outline" id="gen-aff-btn" onclick="openAffDashboard()" title="Mở Shopee Affiliate Dashboard để lấy link" style="white-space:nowrap;font-size:12px">🔗 Lấy link</button>
+            </div>
+            <div id="aff-hint" class="hidden" style="font-size:11px;color:var(--muted);margin-top:4px">💡 Copy link từ dashboard rồi paste vào ô trên</div>
           </div>
           <div id="scrape-error" class="error-msg hidden"></div>
 
@@ -373,7 +377,22 @@ function showProduct(p) {
     img.classList.remove('hidden');
     document.getElementById('prod-img-placeholder').classList.add('hidden');
   }
+  // Tự điền affiliate link nếu API trả về
+  if (p.affiliate_link) {
+    document.getElementById('affiliate-link').value = p.affiliate_link;
+    document.getElementById('aff-hint').classList.add('hidden');
+  } else {
+    // Không có link → gợi ý lấy thủ công
+    document.getElementById('aff-hint').classList.remove('hidden');
+  }
   document.getElementById('product-preview').classList.remove('hidden');
+}
+
+function openAffDashboard() {
+  const url = productData
+    ? `https://affiliate.shopee.vn/offer/product_offer?itemId=${productData.item_id}&shopId=${productData.shop_id}`
+    : 'https://affiliate.shopee.vn/offer/product_offer';
+  window.open(url, '_blank');
 }
 
 async function generateContent() {

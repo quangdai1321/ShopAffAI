@@ -137,22 +137,27 @@ def resolve_short_url(url):
         return url
 
 def get_affiliate_link(item_id, shop_id):
-    try:
-        headers = {**HEADERS, "Content-Type": "application/json"}
-        payload = {
-            "item_id": int(item_id),
-            "shop_id": int(shop_id),
-            "source_url": f"https://shopee.vn/product/{shop_id}/{item_id}"
-        }
-        resp = requests.post(
-            "https://affiliate.shopee.vn/api/v2/link/generate",
-            headers=headers, cookies=get_cookies(), json=payload, timeout=10
-        )
-        data = resp.json()
-        return (data.get("data") or {}).get("short_link", "")
-    except Exception as e:
-        print(f"Affiliate link error: {e}")
-        return ""
+    source_url = f"https://shopee.vn/product/{shop_id}/{item_id}"
+    endpoints = [
+        ("POST", "https://affiliate.shopee.vn/api/v2/link/generate",
+         {"item_id": int(item_id), "shop_id": int(shop_id), "source_url": source_url}),
+        ("POST", "https://affiliate.shopee.vn/api/v1/link/generate",
+         {"item_id": int(item_id), "shop_id": int(shop_id), "url": source_url}),
+    ]
+    h = {**get_headers(), "Content-Type": "application/json",
+         "Referer": "https://affiliate.shopee.vn/"}
+    for method, url, payload in endpoints:
+        try:
+            resp = requests.post(url, headers=h, cookies=get_cookies(), json=payload, timeout=10)
+            print(f"Affiliate [{url}] status={resp.status_code} body={resp.text[:200]}")
+            data = resp.json()
+            link = (data.get("data") or {}).get("short_link", "") or \
+                   (data.get("data") or {}).get("link", "")
+            if link:
+                return link
+        except Exception as e:
+            print(f"Affiliate link error [{url}]: {e}")
+    return ""
 
 def scrape_shopee_api(shop_id, item_id):
     """Thử nhiều endpoint API khác nhau"""
@@ -309,6 +314,9 @@ def scrape():
         return jsonify({"error": f"Không thể đọc sản phẩm từ Shopee{hint}. Server cloud bị Shopee hạn chế — hãy cập nhật cookie mới tại ⚙️ Cookie"}), 400
 
     product["url"] = url
+    if shop_id and item_id:
+        product.setdefault("shop_id", shop_id)
+        product.setdefault("item_id", item_id)
     print(f"Result: {product}")
     return jsonify(product)
 
