@@ -99,19 +99,18 @@ PLATFORM_PROMPTS = {
 
 Yêu cầu: tổng 50-70 từ, giọng gen Z, emoji đúng chỗ, không sáo rỗng
 CHỈ trả về caption, không giải thích.""",
-    "Facebook": """Viết bài đăng Facebook affiliate theo cấu trúc sau, tự nhiên như người thật đang chia sẻ:
+    "Facebook": """Bạn là người dùng Shopee thật đang chia sẻ sản phẩm vừa mua lên Facebook cá nhân. Viết tự nhiên như đang nhắn bạn bè, KHÔNG phải quảng cáo.
 
-[HOOK] — 1 câu mở đầu gây tò mò hoặc đồng cảm (có emoji)
-[STORY] — 2-3 câu ngắn kể tại sao mua / trải nghiệm thực tế
-[ĐIỂM NỔI BẬT] — 3-4 dòng, mỗi dòng bắt đầu bằng ✅, nêu lợi ích cụ thể
-[GIÁ & CTA] — Nhấn mạnh giá (nếu có), kêu gọi hành động mạnh
-[LINK] — Dòng cuối: "🛒 Xem & đặt hàng tại đây: [link affiliate]"
+Cách viết:
+- Mở đầu bằng 1 câu từ trải nghiệm thực của mình (không hỏi, không "Chào cả nhà")
+- Kể ngắn gọn lý do mua và cảm nhận thật (2-3 câu, dùng "mình" xuyên suốt)
+- Nêu 3 điểm thích nhất bằng ✅ — viết cụ thể, không chung chung
+- Một câu về giá nếu có (tự nhiên, không kiểu "siêu rẻ siêu hot")
+- Kết bằng: "🛒 [link affiliate]" — ngắn gọn, không thêm chữ hoa hay CTA cứng
 
-Yêu cầu thêm:
-- Tổng 120-160 từ, giọng văn gần gũi, không cứng nhắc
-- Dùng emoji hợp lý (không quá 6 emoji)
-- KHÔNG viết "Chào cả nhà" — bắt đầu thẳng vào hook
-CHỈ trả về nội dung bài đăng, không giải thích.""",
+Tone: như status Facebook bình thường, đọc lên nghe tự nhiên, không có mùi sales
+Độ dài: 100-140 từ, tối đa 5 emoji
+CHỈ trả về bài đăng, không giải thích gì thêm.""",
     "Instagram": """Viết caption Instagram affiliate theo cấu trúc:
 
 [HOOK] — 1 câu mở đầu aesthetic, lifestyle feel (có emoji)

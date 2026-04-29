@@ -78,8 +78,12 @@
 
   /* OUTPUT */
   .output-container { position: relative; }
-  .output-text { background: #fafafa; border: 1.5px solid var(--border); border-radius: 8px; padding: 14px; font-size: 14px; line-height: 1.75; color: var(--text); white-space: pre-wrap; min-height: 320px; max-height: 600px; overflow-y: auto; }
+  .output-text { background: #fafafa; border: 1.5px solid var(--border); border-radius: 8px; padding: 16px 18px; font-size: 14.5px; line-height: 1.9; color: var(--text); min-height: 340px; max-height: 640px; overflow-y: auto; }
+  .output-text p { margin-bottom: 12px; }
+  .output-text p:last-child { margin-bottom: 0; }
+  .output-placeholder { color: var(--muted); font-style: italic; font-size: 14px; }
   .copy-btn { position: absolute; top: 8px; right: 8px; font-size: 12px; padding: 5px 12px; border-radius: 6px; }
+  .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 6px; }
 
   /* SCHEDULE */
   .schedule-header { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
@@ -288,9 +292,12 @@
             <p>AI đang tạo nội dung...</p>
           </div>
           <div class="output-container">
-            <div class="output-text" id="ai-output">Nội dung sẽ xuất hiện tại đây sau khi bạn nhấn "Tạo nội dung AI"...</div>
+            <div class="output-text" id="ai-output">
+              <span class="output-placeholder">Nội dung sẽ xuất hiện tại đây sau khi bạn nhấn "Tạo nội dung AI"...</span>
+            </div>
             <button class="btn btn-outline copy-btn" onclick="copyContent()">Sao chép</button>
           </div>
+          <div class="char-count" id="char-count"></div>
           <div id="copy-success" class="hidden success-msg">✓ Đã sao chép vào clipboard!</div>
         </div>
       </div>
@@ -413,8 +420,8 @@ async function generateContent() {
       body: JSON.stringify({product: productData, platform: currentPlatform, affiliate_link: affiliateLink})
     });
     const data = await resp.json();
-    if (data.error) { output.textContent = 'Lỗi: ' + data.error; return; }
-    output.textContent = data.content;
+    if (data.error) { output.innerHTML = '<span class="output-placeholder">Lỗi: ' + data.error + '</span>'; return; }
+    renderOutput(data.content);
     addHistory(currentPlatform, data.content);
   } catch(e) {
     output.textContent = 'Lỗi kết nối. Thử lại!';
@@ -435,17 +442,31 @@ function addHistory(platform, content) {
     </div>`).join('');
 }
 
-function loadHistory(i) {
-  document.getElementById('ai-output').textContent = history[i].content;
+
+let rawContent = '';
+
+function renderOutput(text) {
+  rawContent = text;
+  const output = document.getElementById('ai-output');
+  const html = text
+    .split(/\n{2,}/)
+    .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+  output.innerHTML = html;
+  document.getElementById('char-count').textContent = `${text.length} ký tự`;
 }
 
 function copyContent() {
-  const text = document.getElementById('ai-output').textContent;
-  navigator.clipboard.writeText(text).then(() => {
+  if (!rawContent) return;
+  navigator.clipboard.writeText(rawContent).then(() => {
     const msg = document.getElementById('copy-success');
     msg.classList.remove('hidden');
     setTimeout(() => msg.classList.add('hidden'), 2000);
   });
+}
+
+function loadHistory(i) {
+  renderOutput(history[i].content);
 }
 
 function buildSchedule() {
