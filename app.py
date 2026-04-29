@@ -377,13 +377,25 @@ def flash_sale():
     try:
         sessions_resp = requests.get(
             "https://shopee.vn/api/v4/flash_sale/get_all_sessions",
-            headers=HEADERS, cookies=get_cookies(), timeout=10
+            headers=get_headers(), cookies=get_cookies(), timeout=10
         )
+        print(f"[flash-sale] sessions status={sessions_resp.status_code} body={sessions_resp.text[:300]}")
         sessions_data = sessions_resp.json()
         sessions_list = (sessions_data.get("data") or {}).get("sessions", [])
 
         if not sessions_list:
-            return jsonify({"items": [], "message": "Không có Flash Sale nào đang diễn ra"})
+            # Thử endpoint thay thế
+            sessions_resp2 = requests.get(
+                "https://shopee.vn/api/v4/flash_sale/get_all_sessions?limit=8",
+                headers=get_headers(), cookies=get_cookies(), timeout=10
+            )
+            print(f"[flash-sale] sessions2 status={sessions_resp2.status_code} body={sessions_resp2.text[:300]}")
+            sessions_data = sessions_resp2.json()
+            sessions_list = (sessions_data.get("data") or {}).get("sessions", [])
+
+        if not sessions_list:
+            raw_body = sessions_resp.text[:500]
+            return jsonify({"items": [], "message": f"Shopee không trả về session Flash Sale. Response: {raw_body}"})
 
         now_ms = int(time.time()) * 1000
         active = None
@@ -405,10 +417,12 @@ def flash_sale():
         items_resp = requests.get(
             "https://shopee.vn/api/v4/flash_sale/get_items_by_session_id",
             params={"promotionid": promo_id, "category_id": 0, "order": 0, "offset": 0, "limit": 100},
-            headers=HEADERS, cookies=get_cookies(), timeout=12
+            headers=get_headers(), cookies=get_cookies(), timeout=12
         )
+        print(f"[flash-sale] items status={items_resp.status_code} body={items_resp.text[:300]}")
         items_data = items_resp.json()
         raw_items = (items_data.get("data") or {}).get("items", [])
+        print(f"[flash-sale] promo_id={promo_id} raw_items={len(raw_items)}")
 
         brands_to_check = [brand_filter] if brand_filter else BIG_BRANDS
         results = []
