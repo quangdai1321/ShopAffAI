@@ -324,35 +324,56 @@ def scrape_shopee_html(url):
             except:
                 continue
 
-        # 4. Tìm ảnh Shopee CDN trong toàn bộ HTML bằng regex
+        # 4. Tìm ảnh Shopee CDN trong toàn bộ HTML bằng regex (cả 2 format cũ và mới)
+        # Format cũ: [a-f0-9]{32}  |  Format mới: vn-SHOPID-RANDOM-HASH
         cdn_imgs = list(dict.fromkeys(re.findall(
-            r'https://down-vn\.img\.susercontent\.com/file/[a-f0-9]{32}', html_text
+            r'https://down-vn\.img\.susercontent\.com/file/[a-zA-Z0-9_-]+', html_text
         )))[:12]
 
-        # 4b. Tìm mảng hash ảnh dạng JSON ["aabbcc...32chars", ...] trong <script>
+        # 4b. Tìm mảng image IDs trong JSON của <script> tags
         if len(cdn_imgs) < 2:
+            # Pattern image ID: hex 32 chars HOẶC vn-DIGITS-ALNUM-ALNUM
+            IMG_ID_RE = re.compile(r'"((?:[a-f0-9]{32}|[a-z]{2}-\d+-[a-zA-Z0-9]+-[a-zA-Z0-9]+))"')
             hash_imgs = []
-            # Tìm "images":["<32hexchar>", ...] trong script tags
+            search_sources = [html_text]
             for script in soup.find_all("script"):
-                script_text = script.string or ""
-                matches = re.findall(r'"images"\s*:\s*\[([^\]]+)\]', script_text)
+                if script.string:
+                    search_sources.append(script.string)
+            for source in search_sources:
+                matches = re.findall(r'"images"\s*:\s*\[([^\]]{5,2000})\]', source)
                 for match in matches:
-                    hashes = re.findall(r'"([a-f0-9]{32})"', match)
-                    for h in hashes:
-                        url = f"https://down-vn.img.susercontent.com/file/{h}"
-                        if url not in hash_imgs:
-                            hash_imgs.append(url)
-            # Cũng quét trong toàn bộ html_text (Shopee có thể nhúng trong inline JSON)
-            if len(hash_imgs) < 2:
-                all_matches = re.findall(r'"images"\s*:\s*\[([^\]]{10,500})\]', html_text)
-                for match in all_matches:
-                    hashes = re.findall(r'"([a-f0-9]{32})"', match)
-                    for h in hashes:
+                    for h in IMG_ID_RE.findall(match):
                         url = f"https://down-vn.img.susercontent.com/file/{h}"
                         if url not in hash_imgs:
                             hash_imgs.append(url)
             if hash_imgs:
                 cdn_imgs = hash_imgs[:12]
+
+        # 4c. __NEXT_DATA__ (Next.js SSR data)
+        if len(cdn_imgs) < 2:
+            next_data_tag = soup.find("script", id="__NEXT_DATA__")
+            if next_data_tag and next_data_tag.string:
+                try:
+                    ndata = json.loads(next_data_tag.string)
+                    # traverse looking for images array
+                    def _find_images(obj, depth=0):
+                        if depth > 8: return []
+                        if isinstance(obj, dict):
+                            if "images" in obj and isinstance(obj["images"], list):
+                                return obj["images"]
+                            for v in obj.values():
+                                r = _find_images(v, depth+1)
+                                if r: return r
+                        elif isinstance(obj, list):
+                            for item in obj:
+                                r = _find_images(item, depth+1)
+                                if r: return r
+                        return []
+                    next_imgs = _find_images(ndata)
+                    if next_imgs:
+                        cdn_imgs = _build_img_list(next_imgs)[:12]
+                except:
+                    pass
 
         # 5. Fallback cuối: title + OG
         title = soup.find("title")
@@ -360,7 +381,11 @@ def scrape_shopee_html(url):
         if og_title and not name:
             name = og_title.get("content", "").replace(" | Shopee Việt Nam", "")
         all_imgs = cdn_imgs or all_og_imgs
-        print(f"[html-scrape] cdn_imgs={len(cdn_imgs)} all_og_imgs={len(all_og_imgs)} total={len(all_imgs)}")
+        # Debug: count occurrences of Shopee image ID patterns in raw HTML
+        vn_count = len(re.findall(r'vn-\d+-[a-zA-Z0-9]+-[a-zA-Z0-9]+', html_text))
+        hex_count = len(re.findall(r'[a-f0-9]{32}', html_text))
+        imgs_keys = len(re.findall(r'"images"\s*:', html_text))
+        print(f"[html-scrape] cdn_imgs={len(cdn_imgs)} all_og_imgs={len(all_og_imgs)} total={len(all_imgs)} | vn_ids={vn_count} hex_ids={hex_count} images_keys={imgs_keys} html_len={len(html_text)}")
         return {
             "name": name,
             "price": og_price_tag["content"] + "đ" if og_price_tag else "",
