@@ -518,37 +518,98 @@ def _build_image_url(img_id):
         return img_id
     return f"https://down-vn.img.susercontent.com/file/{img_id}"
 
+def _search_keyword_html(keyword):
+    """Scrape trang HTML tìm kiếm Shopee — ít bị geo-block hơn JSON API"""
+    try:
+        url = f"https://shopee.vn/search?keyword={requests.utils.quote(keyword)}&sortBy=sales&order=desc"
+        html_headers = dict(get_headers())
+        html_headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        html_headers.pop("X-Requested-With", None)
+        html_headers.pop("X-Api-Source", None)
+        resp = requests.get(url, headers=html_headers, cookies=get_cookies(), timeout=15)
+        html = resp.text
+        print(f"[deal-html] keyword={keyword!r} status={resp.status_code} html_len={len(html)}")
+
+        # Tìm __NEXT_DATA__ (Next.js SSR)
+        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.+?)</script>', html, re.DOTALL)
+        if m:
+            ndata = json.loads(m.group(1))
+            # Tìm mảng items trong cấu trúc Next.js
+            def _dig(obj, depth=0):
+                if depth > 10: return []
+                if isinstance(obj, dict):
+                    for k in ("items", "searchItems", "search_items", "result"):
+                        if k in obj and isinstance(obj[k], list) and len(obj[k]) > 2:
+                            return obj[k]
+                    for v in obj.values():
+                        r = _dig(v, depth+1)
+                        if r: return r
+                elif isinstance(obj, list) and len(obj) > 2:
+                    if isinstance(obj[0], dict) and ("itemid" in obj[0] or "item_basic" in obj[0]):
+                        return obj
+                    for item in obj:
+                        r = _dig(item, depth+1)
+                        if r: return r
+                return []
+            items = _dig(ndata)
+            if items:
+                print(f"[deal-html] Found {len(items)} items via __NEXT_DATA__")
+                return items
+
+        # Tìm window.__INITIAL_STATE__
+        m2 = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.+?});\s*</script>', html, re.DOTALL)
+        if m2:
+            state = json.loads(m2.group(1))
+            items = _dig(state) if 'ndata' not in dir() else []
+            if not items:
+                def _dig2(obj, depth=0):
+                    if depth > 8: return []
+                    if isinstance(obj, dict):
+                        for k in ("items", "searchItems", "result"):
+                            if k in obj and isinstance(obj[k], list) and len(obj[k]) > 2:
+                                return obj[k]
+                        for v in obj.values():
+                            r = _dig2(v, depth+1)
+                            if r: return r
+                    return []
+                items = _dig2(state)
+            if items:
+                print(f"[deal-html] Found {len(items)} items via __INITIAL_STATE__")
+                return items
+
+        print(f"[deal-html] No items found in HTML for {keyword!r}")
+        return []
+    except Exception as e:
+        print(f"[deal-html] Error for {keyword!r}: {e}")
+        return []
+
 def _search_keyword(keyword):
-    """Thử search_items API, fallback sang suggest API"""
+    """Thử JSON API trước, fallback sang HTML scrape"""
     endpoints = [
         ("https://shopee.vn/api/v4/search/search_items", {
             "keyword": keyword, "limit": 30, "newest": 0,
             "order": "desc", "by": "sales", "version": 2,
             "page_type": "search", "scenario": "PAGE_GLOBAL_SEARCH",
         }),
-        ("https://shopee.vn/api/v4/search/search_items", {
-            "keyword": keyword, "limit": 30, "newest": 0,
-            "order": "desc", "by": "relevancy", "version": 2,
-            "page_type": "search",
-        }),
     ]
     for url, params in endpoints:
         try:
             resp = requests.get(url, params=params, headers=get_headers(),
                                 cookies=get_cookies(), timeout=12)
-            print(f"[deal-scan] keyword={keyword!r} status={resp.status_code} body={resp.text[:400]}")
             data = resp.json()
-            # check error code
             err = data.get("error") or data.get("err") or 0
             if err and int(err) != 0:
-                print(f"[deal-scan] API error={err}, skipping endpoint")
-                continue
+                print(f"[deal-scan] API geo-blocked ({err}), trying HTML fallback for {keyword!r}")
+                break
             items = (data.get("data") or {}).get("items", [])
             if items:
+                print(f"[deal-scan] API ok: {len(items)} items for {keyword!r}")
                 return items
         except Exception as e:
-            print(f"[deal-scan] {url} error: {e}")
-    return []
+            print(f"[deal-scan] API error for {keyword!r}: {e}")
+
+    # Fallback: HTML scrape
+    return _search_keyword_html(keyword)
 
 def _process_search_items(items, seen):
     """Chuyển đổi raw API items thành deal objects"""
