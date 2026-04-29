@@ -330,24 +330,20 @@ def scrape_shopee_html(url):
             r'https://down-vn\.img\.susercontent\.com/file/[a-zA-Z0-9_-]+', html_text
         )))[:12]
 
-        # 4b. Tìm mảng image IDs trong JSON của <script> tags
+        # 4b. Tìm mảng image IDs trong JSON — chỉ lấy array ĐẦU TIÊN có >= 3 ảnh (tránh ảnh sp liên quan)
         if len(cdn_imgs) < 2:
-            # Pattern image ID: hex 32 chars HOẶC vn-DIGITS-ALNUM-ALNUM
             IMG_ID_RE = re.compile(r'"((?:[a-f0-9]{32}|[a-z]{2}-\d+-[a-zA-Z0-9]+-[a-zA-Z0-9]+))"')
-            hash_imgs = []
-            search_sources = [html_text]
-            for script in soup.find_all("script"):
-                if script.string:
-                    search_sources.append(script.string)
+            search_sources = [html_text] + [s.string for s in soup.find_all("script") if s.string]
             for source in search_sources:
-                matches = re.findall(r'"images"\s*:\s*\[([^\]]{5,2000})\]', source)
-                for match in matches:
-                    for h in IMG_ID_RE.findall(match):
-                        url = f"https://down-vn.img.susercontent.com/file/{h}"
-                        if url not in hash_imgs:
-                            hash_imgs.append(url)
-            if hash_imgs:
-                cdn_imgs = hash_imgs[:12]
+                for match in re.findall(r'"images"\s*:\s*\[([^\]]{5,2000})\]', source):
+                    ids = IMG_ID_RE.findall(match)
+                    if len(ids) >= 3:
+                        cdn_imgs = list(dict.fromkeys(
+                            f"https://down-vn.img.susercontent.com/file/{h}" for h in ids
+                        ))[:12]
+                        break
+                if len(cdn_imgs) >= 3:
+                    break
 
         # 4c. __NEXT_DATA__ (Next.js SSR data)
         if len(cdn_imgs) < 2:
@@ -375,23 +371,49 @@ def scrape_shopee_html(url):
                 except:
                     pass
 
-        # 5. Fallback cuối: title + OG
+        # 5. Fallback cuối: title + OG + regex price/rating
         title = soup.find("title")
         name = title.get_text(strip=True).replace(" | Shopee Việt Nam", "") if title else ""
         if og_title and not name:
             name = og_title.get("content", "").replace(" | Shopee Việt Nam", "")
+
+        # Giá từ OG tag hoặc regex trong JSON
+        price_str = og_price_tag["content"] + "đ" if og_price_tag else ""
+        if not price_str:
+            price_matches = re.findall(r'"price"\s*:\s*(\d{8,14})', html_text)
+            for p in price_matches:
+                vnd = int(p) // 100000
+                if vnd >= 1000:  # ít nhất 1.000đ — loại giá rác
+                    price_str = f"{vnd:,}đ".replace(",", ".")
+                    break
+
+        # Rating từ regex
+        rating_str = ""
+        r_match = re.search(r'"rating_star"\s*:\s*([\d.]+)', html_text)
+        if r_match:
+            try:
+                rv = float(r_match.group(1))
+                if 1.0 <= rv <= 5.0:
+                    rating_str = f"⭐ {rv:.1f}"
+            except: pass
+
+        # Sold từ regex
+        sold_str = ""
+        s_match = re.search(r'"historical_sold"\s*:\s*(\d+)', html_text)
+        if s_match:
+            sv = int(s_match.group(1))
+            if sv > 0:
+                sold_str = f"{sv//1000}k+" if sv >= 1000 else f"{sv} đã mua"
+
         all_imgs = cdn_imgs or all_og_imgs
-        # Debug: count occurrences of Shopee image ID patterns in raw HTML
-        vn_count = len(re.findall(r'vn-\d+-[a-zA-Z0-9]+-[a-zA-Z0-9]+', html_text))
-        hex_count = len(re.findall(r'[a-f0-9]{32}', html_text))
-        imgs_keys = len(re.findall(r'"images"\s*:', html_text))
-        print(f"[html-scrape] cdn_imgs={len(cdn_imgs)} all_og_imgs={len(all_og_imgs)} total={len(all_imgs)} | vn_ids={vn_count} hex_ids={hex_count} images_keys={imgs_keys} html_len={len(html_text)}")
+        print(f"[html-scrape] imgs={len(all_imgs)} price={price_str!r} rating={rating_str!r} sold={sold_str!r}")
         return {
             "name": name,
-            "price": og_price_tag["content"] + "đ" if og_price_tag else "",
+            "price": price_str,
             "image": all_imgs[0] if all_imgs else og_img_url,
             "images": all_imgs or ([og_img_url] if og_img_url else []),
-            "rating": "", "sold": "",
+            "rating": rating_str,
+            "sold": sold_str,
             "commission": "Xem dashboard affiliate",
             "description": og_desc["content"] if og_desc else "",
             "affiliate_link": "",
@@ -478,6 +500,45 @@ BRAND_KEYWORDS = {
     "colgate": ["colgate"],
 }
 
+def _build_image_url(img_id):
+    if not img_id:
+        return ""
+    if img_id.startswith("http"):
+        return img_id
+    return f"https://down-vn.img.susercontent.com/file/{img_id}"
+
+def _search_keyword(keyword):
+    """Thử search_items API, fallback sang suggest API"""
+    endpoints = [
+        ("https://shopee.vn/api/v4/search/search_items", {
+            "keyword": keyword, "limit": 30, "newest": 0,
+            "order": "desc", "by": "sales", "version": 2,
+            "page_type": "search", "scenario": "PAGE_GLOBAL_SEARCH",
+        }),
+        ("https://shopee.vn/api/v4/search/search_items", {
+            "keyword": keyword, "limit": 30, "newest": 0,
+            "order": "desc", "by": "relevancy", "version": 2,
+            "page_type": "search",
+        }),
+    ]
+    for url, params in endpoints:
+        try:
+            resp = requests.get(url, params=params, headers=get_headers(),
+                                cookies=get_cookies(), timeout=12)
+            print(f"[deal-scan] keyword={keyword!r} status={resp.status_code} body={resp.text[:400]}")
+            data = resp.json()
+            # check error code
+            err = data.get("error") or data.get("err") or 0
+            if err and int(err) != 0:
+                print(f"[deal-scan] API error={err}, skipping endpoint")
+                continue
+            items = (data.get("data") or {}).get("items", [])
+            if items:
+                return items
+        except Exception as e:
+            print(f"[deal-scan] {url} error: {e}")
+    return []
+
 @app.route("/api/flash-sale", methods=["GET"])
 def flash_sale():
     brand_filter = request.args.get("brand", "").lower().strip()
@@ -485,86 +546,73 @@ def flash_sale():
 
     results = []
     seen = set()
+    api_blocked = False
 
-    for keyword in keywords:
-        try:
-            resp = requests.get(
-                "https://shopee.vn/api/v4/search/search_items",
-                params={
-                    "keyword": keyword,
-                    "limit": 30,
-                    "newest": 0,
-                    "order": "desc",
-                    "by": "sales",
-                    "version": 2,
-                    "page_type": "search",
-                    "scenario": "PAGE_GLOBAL_SEARCH",
-                },
-                headers=get_headers(), cookies=get_cookies(), timeout=10
-            )
-            print(f"[deal-scan] keyword={keyword} status={resp.status_code} body={resp.text[:300]}")
-            data = resp.json()
-            items = (data.get("data") or {}).get("items", [])
-            print(f"[deal-scan] keyword={keyword} got {len(items)} items")
-
-            for item in items:
-                info = item.get("item_basic") or item
-                item_id = str(info.get("itemid", ""))
-                if not item_id or item_id in seen:
-                    continue
-                seen.add(item_id)
-
-                price_raw = int(info.get("price", 0) or 0)
-                price_before_raw = int(info.get("price_before_discount", 0) or 0)
-                price_min_raw = int(info.get("price_min", 0) or 0)
-                price_min_before_raw = int(info.get("price_min_before_discount", 0) or 0)
-
-                # Ưu tiên price_before_discount, fallback price_min_before_discount
-                actual_price = price_raw or price_min_raw
-                actual_before = price_before_raw or price_min_before_raw
-
-                # Thử lấy discount trực tiếp từ raw_discount field
-                raw_discount = info.get("raw_discount") or info.get("discount") or 0
-
-                price_vnd = actual_price // 100000
-                price_before_vnd = actual_before // 100000 if actual_before > actual_price else 0
-
-                if price_before_vnd > price_vnd > 0:
-                    discount_pct = round((price_before_vnd - price_vnd) / price_before_vnd * 100)
-                elif raw_discount and int(raw_discount) > 0:
-                    discount_pct = int(raw_discount)
-                    price_before_vnd = 0
-                else:
-                    discount_pct = 0
-
-                images = info.get("images") or []
-                image_url = f"https://down-vn.img.susercontent.com/file/{images[0]}" if images else ""
-                shop_id = str(info.get("shopid", ""))
-                sold = info.get("sold", 0) or 0
-                sold_str = f"{int(sold)//1000}k+" if int(sold) >= 1000 else str(sold)
-                rating = info.get("item_rating", {}).get("rating_star", 0) or 0
-
-                results.append({
-                    "name": info.get("name", ""),
-                    "price": f"{price_vnd:,}đ".replace(",", ".") if price_vnd else "",
-                    "price_before": f"{price_before_vnd:,}đ".replace(",", ".") if price_before_vnd else "",
-                    "discount": f"-{discount_pct}%" if discount_pct >= 5 else "",
-                    "discount_num": discount_pct,
-                    "image": image_url,
-                    "shop_id": shop_id,
-                    "item_id": item_id,
-                    "url": f"https://shopee.vn/product/{shop_id}/{item_id}",
-                    "sold_pct": min(85, discount_pct) if discount_pct else 30,
-                    "stock_left": sold_str,
-                    "rating": f"⭐{rating:.1f}" if rating else "",
-                })
-        except Exception as e:
-            print(f"[deal-scan] keyword={keyword} error: {e}")
+    for keyword in keywords[:3]:  # giới hạn 3 keyword để tránh timeout
+        items = _search_keyword(keyword)
+        if not items:
+            api_blocked = True
             continue
 
-    if not results:
-        return jsonify({"items": [], "message": "Shopee không trả về kết quả. Thử cập nhật cookie mới tại ⚙️ Cookie."})
+        for item in items:
+            info = item.get("item_basic") or item
+            item_id = str(info.get("itemid", ""))
+            if not item_id or item_id in seen:
+                continue
+            seen.add(item_id)
 
+            price_raw    = int(info.get("price", 0) or 0)
+            price_min    = int(info.get("price_min", 0) or 0)
+            price_before = int(info.get("price_before_discount", 0) or 0)
+            price_min_before = int(info.get("price_min_before_discount", 0) or 0)
+
+            actual_price  = price_raw or price_min
+            actual_before = price_before or price_min_before
+            raw_discount  = int(info.get("raw_discount") or info.get("discount") or 0)
+
+            price_vnd        = actual_price // 100000
+            price_before_vnd = actual_before // 100000 if actual_before > actual_price else 0
+
+            if price_before_vnd > price_vnd > 0:
+                discount_pct = round((price_before_vnd - price_vnd) / price_before_vnd * 100)
+            elif raw_discount > 0:
+                discount_pct = raw_discount
+                price_before_vnd = 0
+            else:
+                discount_pct = 0
+
+            images   = info.get("images") or []
+            image_url = _build_image_url(images[0]) if images else ""
+            shop_id  = str(info.get("shopid", ""))
+            sold     = int(info.get("sold", 0) or 0)
+            sold_str = f"{sold//1000}k+" if sold >= 1000 else (str(sold) if sold else "")
+            rating   = float((info.get("item_rating") or {}).get("rating_star", 0) or 0)
+
+            if not price_vnd:
+                continue
+
+            results.append({
+                "name": info.get("name", ""),
+                "price": f"{price_vnd:,}đ".replace(",", "."),
+                "price_before": f"{price_before_vnd:,}đ".replace(",", ".") if price_before_vnd else "",
+                "discount": f"-{discount_pct}%" if discount_pct >= 5 else "",
+                "discount_num": discount_pct,
+                "image": image_url,
+                "shop_id": shop_id,
+                "item_id": item_id,
+                "url": f"https://shopee.vn/product/{shop_id}/{item_id}",
+                "sold_pct": min(85, discount_pct) if discount_pct else 30,
+                "stock_left": sold_str,
+                "rating": f"⭐{rating:.1f}" if rating >= 1 else "",
+            })
+
+    if not results:
+        msg = ("Server cloud bị Shopee giới hạn truy cập tìm kiếm. "
+               "Hãy cập nhật cookie mới tại ⚙️ Cookie rồi thử lại." if api_blocked
+               else "Không tìm thấy sản phẩm cho từ khóa này.")
+        return jsonify({"items": [], "message": msg})
+
+    # Sắp xếp: ưu tiên có discount, sau đó giữ theo sold
     results.sort(key=lambda x: x["discount_num"], reverse=True)
     for r in results:
         del r["discount_num"]
