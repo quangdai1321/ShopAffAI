@@ -135,6 +135,16 @@
   .share-native { background: #25d366; color: white; }
   .share-native:hover { background: #1da851; transform: translateY(-1px); }
   .share-toast { font-size: 12px; margin-top: 8px; padding: 8px 12px; background: #e8f5e9; color: #2e7d32; border-radius: 6px; border: 1px solid #a5d6a7; }
+  /* COPY MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal-box { background: white; border-radius: 14px; padding: 24px; max-width: 480px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .modal-step { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  .modal-content { background: #f5f5f5; border: 1.5px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.7; color: var(--text); max-height: 200px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 14px; user-select: all; cursor: text; }
+  .modal-btns { display: flex; gap: 8px; }
+  .modal-copy { flex: 1; background: var(--primary); color: white; border: none; border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .modal-open { flex: 1; border: 1.5px solid var(--border); background: white; color: var(--text); border-radius: 8px; padding: 10px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .modal-copied { background: var(--success) !important; }
 
   /* FLASH SALE SECTION */
   .flash-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -356,6 +366,22 @@
   </div>
 </div>
 
+<!-- COPY MODAL -->
+<div class="modal-overlay hidden" id="copy-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-title"><span id="modal-icon">📘</span><span id="modal-platform-name">Facebook</span></div>
+    <div class="modal-step" id="modal-step">Nội dung đã được copy. Nhấn <strong>Ctrl+V</strong> vào ô bài viết để paste.</div>
+    <div class="modal-content" id="modal-content-text"></div>
+    <div class="modal-btns">
+      <button class="modal-copy" id="modal-copy-btn" onclick="modalCopy()">📋 Copy lại</button>
+      <button class="modal-open" id="modal-open-btn" onclick="modalOpenPlatform()">Mở <span id="modal-btn-label">Facebook</span> ↗</button>
+    </div>
+    <div style="text-align:center;margin-top:12px">
+      <button onclick="closeModal()" style="font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer">Đóng</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const HOT_HOURS = {{ hot_hours | tojson }};
 const DAYS = ['T2','T3','T4','T5','T6','T7','CN'];
@@ -545,49 +571,64 @@ function confirmSchedule() {
 buildSchedule();
 
 // ── SHARE TO SOCIAL ─────────────────────────────────────────────
-function showShareToast(msg) {
-  const t = document.getElementById('share-toast');
-  t.textContent = msg;
-  t.classList.remove('hidden');
-  setTimeout(() => t.classList.add('hidden'), 4000);
+let _modalPlatformUrl = '';
+
+function openShareModal(icon, platformName, openUrl, step) {
+  navigator.clipboard.writeText(rawContent).catch(() => {});
+  _modalPlatformUrl = openUrl;
+  document.getElementById('modal-icon').textContent = icon;
+  document.getElementById('modal-platform-name').textContent = platformName;
+  document.getElementById('modal-step').innerHTML = step;
+  document.getElementById('modal-content-text').textContent = rawContent;
+  document.getElementById('modal-btn-label').textContent = platformName;
+  document.getElementById('modal-copy-btn').textContent = '📋 Copy lại';
+  document.getElementById('modal-copy-btn').classList.remove('modal-copied');
+  document.getElementById('copy-modal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('copy-modal').classList.add('hidden');
+}
+
+function modalCopy() {
+  navigator.clipboard.writeText(rawContent).then(() => {
+    const btn = document.getElementById('modal-copy-btn');
+    btn.textContent = '✓ Đã copy!';
+    btn.classList.add('modal-copied');
+    setTimeout(() => { btn.textContent = '📋 Copy lại'; btn.classList.remove('modal-copied'); }, 2000);
+  });
+}
+
+function modalOpenPlatform() {
+  if (_modalPlatformUrl) window.open(_modalPlatformUrl, '_blank');
 }
 
 function shareToFacebook() {
   const affiliateLink = document.getElementById('affiliate-link').value.trim();
-  navigator.clipboard.writeText(rawContent).catch(() => {});
-  if (affiliateLink) {
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(affiliateLink)}`, '_blank', 'width=600,height=500');
-    showShareToast('📋 Đã copy nội dung! Facebook sẽ tạo preview card — paste caption vào ô "Thêm nội dung" nhé.');
-  } else {
-    window.open('https://www.facebook.com/', '_blank');
-    showShareToast('📋 Đã copy nội dung! Mở Facebook rồi paste vào ô đăng bài nhé.');
-  }
+  const fbUrl = affiliateLink
+    ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(affiliateLink)}`
+    : 'https://www.facebook.com/';
+  openShareModal(
+    '📘', 'Facebook', fbUrl,
+    '1️⃣ Nhấn <strong>"Mở Facebook ↗"</strong> bên dưới &nbsp;→&nbsp; 2️⃣ Click vào ô soạn bài &nbsp;→&nbsp; 3️⃣ Nhấn <strong>Ctrl+V</strong> để paste nội dung'
+  );
 }
 
 function shareToTikTok() {
-  navigator.clipboard.writeText(rawContent).catch(() => {});
-  const isMobile = /Android|iPhone|iPad/i.test(navigator.userAgent);
-  if (isMobile) {
-    window.open('tiktok://app', '_blank');
-    setTimeout(() => window.open('https://www.tiktok.com/upload', '_blank'), 500);
-  } else {
-    window.open('https://www.tiktok.com/upload', '_blank');
-  }
-  showShareToast('📋 Đã copy caption! Chọn video xong paste caption vào ô mô tả TikTok nhé.');
+  openShareModal(
+    '🎵', 'TikTok', 'https://www.tiktok.com/upload',
+    '1️⃣ Nhấn <strong>"Mở TikTok ↗"</strong> &nbsp;→&nbsp; 2️⃣ Chọn video &nbsp;→&nbsp; 3️⃣ Click ô caption &nbsp;→&nbsp; 4️⃣ <strong>Ctrl+V</strong> paste nội dung'
+  );
 }
 
 function openProductImage() {
-  if (productData && productData.image) {
-    window.open(productData.image, '_blank');
-    showShareToast('🖼️ Ảnh sản phẩm đã mở — nhấn giữ (mobile) hoặc chuột phải → Lưu ảnh.');
-  }
+  if (productData && productData.image) window.open(productData.image, '_blank');
 }
 
 function nativeShare() {
   const affiliateLink = document.getElementById('affiliate-link').value.trim();
   if (navigator.share) {
-    navigator.share({ text: rawContent, url: affiliateLink || undefined })
-      .catch(() => {});
+    navigator.share({ text: rawContent, url: affiliateLink || undefined }).catch(() => {});
   }
 }
 
