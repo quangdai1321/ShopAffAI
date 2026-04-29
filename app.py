@@ -11,7 +11,16 @@ from openai import OpenAI
 load_dotenv()
 
 app = Flask(__name__)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+_openai_client = None
+
+def get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY chưa được cấu hình trong Environment Variables")
+        _openai_client = OpenAI(api_key=api_key)
+    return _openai_client
 
 SHOPEE_COOKIES = {
     "SPC_EC": os.getenv("SHOPEE_SPC_EC", ""),
@@ -283,7 +292,7 @@ Hoa hồng: {product.get('commission', '')}
 Mô tả: {product.get('description', '')}
 Link affiliate: {affiliate_link}"""
 
-    response = client.chat.completions.create(
+    response = get_openai_client().chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
