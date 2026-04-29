@@ -78,7 +78,7 @@
 
   /* OUTPUT */
   .output-container { position: relative; }
-  .output-text { background: #fafafa; border: 1.5px solid var(--border); border-radius: 8px; padding: 14px; font-size: 14px; line-height: 1.75; color: var(--text); white-space: pre-wrap; min-height: 160px; }
+  .output-text { background: #fafafa; border: 1.5px solid var(--border); border-radius: 8px; padding: 14px; font-size: 14px; line-height: 1.75; color: var(--text); white-space: pre-wrap; min-height: 320px; max-height: 600px; overflow-y: auto; }
   .copy-btn { position: absolute; top: 8px; right: 8px; font-size: 12px; padding: 5px 12px; border-radius: 6px; }
 
   /* SCHEDULE */
@@ -554,9 +554,7 @@ function renderFlashItems(items) {
           ${item.price_before ? `<span class="flash-price-before">${item.price_before}</span>` : ''}
           ${item.discount ? `<span class="discount-badge">${item.discount}</span>` : ''}
         </div>
-        ${item.sold_pct > 0 ? `
-        <div class="stock-bar-wrap"><div class="stock-bar" style="width:${item.sold_pct}%"></div></div>
-        <div class="stock-label">Đã bán ${item.sold_pct}% · Còn ${item.stock_left}</div>` : ''}
+        <div class="stock-label" style="margin-bottom:4px">${item.rating || ''} ${item.stock_left ? '· ' + item.stock_left + ' đã bán' : ''}</div>
         <button class="flash-cta" onclick="pickFlashItem(${items.indexOf(item)})">⚡ Cào & Tạo content</button>
       </div>`;
     scroll.appendChild(card);

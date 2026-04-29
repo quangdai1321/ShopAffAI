@@ -388,65 +388,86 @@ def flash_sale():
     keywords = BRAND_KEYWORDS.get(brand_filter, [brand_filter] if brand_filter else BRAND_KEYWORDS[""])
 
     results = []
+    seen = set()
+
     for keyword in keywords:
         try:
             resp = requests.get(
                 "https://shopee.vn/api/v4/search/search_items",
                 params={
                     "keyword": keyword,
-                    "limit": 20,
+                    "limit": 30,
                     "newest": 0,
                     "order": "desc",
                     "by": "sales",
                     "version": 2,
                     "page_type": "search",
                     "scenario": "PAGE_GLOBAL_SEARCH",
-                    "match_id": 0,
                 },
                 headers=get_headers(), cookies=get_cookies(), timeout=10
             )
-            print(f"[deal-scan] keyword={keyword} status={resp.status_code} body={resp.text[:200]}")
+            print(f"[deal-scan] keyword={keyword} status={resp.status_code} body={resp.text[:300]}")
             data = resp.json()
             items = (data.get("data") or {}).get("items", [])
+            print(f"[deal-scan] keyword={keyword} got {len(items)} items")
 
             for item in items:
                 info = item.get("item_basic") or item
+                item_id = str(info.get("itemid", ""))
+                if not item_id or item_id in seen:
+                    continue
+                seen.add(item_id)
+
                 price_raw = int(info.get("price", 0) or 0)
                 price_before_raw = int(info.get("price_before_discount", 0) or 0)
-                if price_before_raw <= price_raw or price_raw == 0:
-                    continue
-                price_vnd = price_raw // 100000
-                price_before_vnd = price_before_raw // 100000
-                discount_pct = round((price_before_vnd - price_vnd) / price_before_vnd * 100)
-                if discount_pct < 10:
-                    continue
+                price_min_raw = int(info.get("price_min", 0) or 0)
+                price_min_before_raw = int(info.get("price_min_before_discount", 0) or 0)
+
+                # Ưu tiên price_before_discount, fallback price_min_before_discount
+                actual_price = price_raw or price_min_raw
+                actual_before = price_before_raw or price_min_before_raw
+
+                # Thử lấy discount trực tiếp từ raw_discount field
+                raw_discount = info.get("raw_discount") or info.get("discount") or 0
+
+                price_vnd = actual_price // 100000
+                price_before_vnd = actual_before // 100000 if actual_before > actual_price else 0
+
+                if price_before_vnd > price_vnd > 0:
+                    discount_pct = round((price_before_vnd - price_vnd) / price_before_vnd * 100)
+                elif raw_discount and int(raw_discount) > 0:
+                    discount_pct = int(raw_discount)
+                    price_before_vnd = 0
+                else:
+                    discount_pct = 0
 
                 images = info.get("images") or []
                 image_url = f"https://down-vn.img.susercontent.com/file/{images[0]}" if images else ""
                 shop_id = str(info.get("shopid", ""))
-                item_id = str(info.get("itemid", ""))
                 sold = info.get("sold", 0) or 0
                 sold_str = f"{int(sold)//1000}k+" if int(sold) >= 1000 else str(sold)
+                rating = info.get("item_rating", {}).get("rating_star", 0) or 0
 
                 results.append({
                     "name": info.get("name", ""),
-                    "price": f"{price_vnd:,}đ".replace(",", "."),
-                    "price_before": f"{price_before_vnd:,}đ".replace(",", "."),
-                    "discount": f"-{discount_pct}%",
+                    "price": f"{price_vnd:,}đ".replace(",", ".") if price_vnd else "",
+                    "price_before": f"{price_before_vnd:,}đ".replace(",", ".") if price_before_vnd else "",
+                    "discount": f"-{discount_pct}%" if discount_pct >= 5 else "",
                     "discount_num": discount_pct,
                     "image": image_url,
                     "shop_id": shop_id,
                     "item_id": item_id,
                     "url": f"https://shopee.vn/product/{shop_id}/{item_id}",
-                    "sold_pct": min(90, discount_pct),
+                    "sold_pct": min(85, discount_pct) if discount_pct else 30,
                     "stock_left": sold_str,
+                    "rating": f"⭐{rating:.1f}" if rating else "",
                 })
         except Exception as e:
             print(f"[deal-scan] keyword={keyword} error: {e}")
             continue
 
     if not results:
-        return jsonify({"items": [], "message": "Không tìm thấy deal giảm giá. Hãy cập nhật cookie mới."})
+        return jsonify({"items": [], "message": "Shopee không trả về kết quả. Thử cập nhật cookie mới tại ⚙️ Cookie."})
 
     results.sort(key=lambda x: x["discount_num"], reverse=True)
     for r in results:
