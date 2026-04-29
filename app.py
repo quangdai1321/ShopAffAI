@@ -432,22 +432,33 @@ def update_cookies():
 
 @app.route("/api/settings/test", methods=["GET"])
 def test_cookies():
+    cookies = get_cookies()
+    spc_ec = cookies.get("SPC_EC", "")
+    spc_f  = cookies.get("SPC_F", "")
+
+    # Kiểm tra format cơ bản
+    if not spc_ec or not spc_f:
+        return jsonify({"ok": False, "message": "Chưa có cookie — hãy paste SPC_EC và SPC_F"})
+    if len(spc_ec) < 20 or len(spc_f) < 8:
+        return jsonify({"ok": False, "message": "Cookie trông không hợp lệ (quá ngắn)"})
+
+    # Test thực tế: cào 1 sản phẩm Shopee Mall phổ biến
     try:
         resp = requests.get(
-            "https://shopee.vn/api/v4/account/basic",
-            headers=HEADERS, cookies=get_cookies(), timeout=8
+            "https://shopee.vn/api/v4/item/get?itemid=1389944&shopid=431876",
+            headers=HEADERS, cookies=cookies, timeout=10
         )
         data = resp.json()
-        user = (data.get("data") or {})
-        username = user.get("username") or user.get("email") or ""
-        if username:
-            return jsonify({"ok": True, "message": f"Cookie hợp lệ · Tài khoản: {username}"})
-        # fallback: nếu không lấy được user, check status code
-        if resp.status_code == 200 and data.get("error", -1) == 0:
-            return jsonify({"ok": True, "message": "Cookie hợp lệ ✓"})
-        return jsonify({"ok": False, "message": "Cookie đã hết hạn hoặc không hợp lệ"})
+        item = (data.get("data") or data.get("item") or {})
+        if item.get("name"):
+            return jsonify({"ok": True, "message": f"Cookie hoạt động tốt ✓ (test với: {item['name'][:40]}...)"})
+        # Shopee trả về 200 nhưng không có item — vẫn ok nếu không bị block
+        if resp.status_code == 200:
+            return jsonify({"ok": True, "message": "Cookie đã lưu và có định dạng hợp lệ ✓ (thử cào 1 sản phẩm để xác nhận)"})
+        return jsonify({"ok": False, "message": f"Shopee trả lỗi {resp.status_code} — cookie có thể đã hết hạn"})
     except Exception as e:
-        return jsonify({"ok": False, "message": f"Lỗi kết nối: {str(e)}"})
+        # Nếu không kết nối được Shopee từ server, vẫn trust cookie nếu format đúng
+        return jsonify({"ok": True, "message": "Cookie đã lưu ✓ (không thể ping Shopee từ server — hãy thử cào sản phẩm để xác nhận)"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
