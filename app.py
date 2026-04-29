@@ -241,6 +241,15 @@ def scrape_shopee_api(shop_id, item_id):
             continue
     return None
 
+def _build_img_list(images):
+    out = []
+    for img in (images or [])[:12]:
+        if img.startswith("http"):
+            out.append(img)
+        else:
+            out.append(f"https://down-vn.img.susercontent.com/file/{img}")
+    return out
+
 def scrape_shopee_html(url):
     """Fallback: scrape từ HTML và schema.org"""
     try:
@@ -249,9 +258,20 @@ def scrape_shopee_html(url):
         session.headers.update(get_headers())
         session.cookies.update(get_cookies())
         resp = session.get(clean_url, timeout=15)
-        soup = BeautifulSoup(resp.text, "html.parser")
+        html_text = resp.text
+        soup = BeautifulSoup(html_text, "html.parser")
 
-        # Tìm trong window.__INITIAL_STATE__ hoặc script data
+        # 1. OG tags — nhanh và đáng tin cậy nhất
+        og_image = soup.find("meta", property="og:image")
+        og_title = soup.find("meta", property="og:title")
+        og_desc  = soup.find("meta", property="og:description")
+        og_price_tag = soup.find("meta", property="product:price:amount")
+        og_img_url = og_image["content"] if og_image and og_image.get("content") else ""
+
+        # Tìm thêm ảnh từ tất cả og:image (Shopee đôi khi có nhiều)
+        all_og_imgs = [t["content"] for t in soup.find_all("meta", property="og:image") if t.get("content")]
+
+        # 2. window.__INITIAL_STATE__
         for script in soup.find_all("script"):
             text = script.string or ""
             if "window.__INITIAL_STATE__" in text:
@@ -263,11 +283,12 @@ def scrape_shopee_html(url):
                         if item.get("name"):
                             price_raw = item.get("price", 0) or 0
                             price = int(price_raw) // 100000
-                            images = item.get("images", [])
+                            imgs = _build_img_list(item.get("images", []))
                             return {
                                 "name": item.get("name", ""),
                                 "price": f"{price:,}đ".replace(",", ".") if price else "",
-                                "image": f"https://down-vn.img.susercontent.com/file/{images[0]}" if images else "",
+                                "image": imgs[0] if imgs else og_img_url,
+                                "images": imgs or all_og_imgs,
                                 "rating": f"⭐ {item.get('item_rating', {}).get('rating_star', 0):.1f}",
                                 "sold": f"{item.get('historical_sold', 0)} đã mua",
                                 "commission": "Xem dashboard affiliate",
@@ -277,7 +298,7 @@ def scrape_shopee_html(url):
                 except:
                     pass
 
-        # Fallback: JSON-LD schema.org
+        # 3. JSON-LD schema.org
         for script in soup.find_all("script", type="application/ld+json"):
             try:
                 data = json.loads(script.string)
@@ -285,12 +306,14 @@ def scrape_shopee_html(url):
                     offers = data.get("offers", {})
                     price_raw = offers.get("price", "")
                     price_str = f"{int(float(price_raw)):,}đ".replace(",", ".") if price_raw else ""
-                    imgs = data.get("image", [])
-                    img = imgs[0] if isinstance(imgs, list) and imgs else (imgs if isinstance(imgs, str) else "")
+                    raw_imgs = data.get("image", [])
+                    if isinstance(raw_imgs, str): raw_imgs = [raw_imgs]
+                    imgs = _build_img_list(raw_imgs) or all_og_imgs
                     return {
                         "name": data.get("name", ""),
                         "price": price_str,
-                        "image": img,
+                        "image": imgs[0] if imgs else "",
+                        "images": imgs,
                         "rating": f"⭐ {data.get('aggregateRating', {}).get('ratingValue', '')}",
                         "sold": "",
                         "commission": "Xem dashboard affiliate",
@@ -300,14 +323,26 @@ def scrape_shopee_html(url):
             except:
                 continue
 
-        # Fallback cuối: lấy tên từ title tag
+        # 4. Tìm ảnh Shopee CDN trong toàn bộ HTML bằng regex
+        cdn_imgs = list(dict.fromkeys(re.findall(
+            r'https://down-vn\.img\.susercontent\.com/file/[a-f0-9]{32}', html_text
+        )))[:12]
+
+        # 5. Fallback cuối: title + OG
         title = soup.find("title")
         name = title.get_text(strip=True).replace(" | Shopee Việt Nam", "") if title else ""
+        if og_title and not name:
+            name = og_title.get("content", "").replace(" | Shopee Việt Nam", "")
+        all_imgs = cdn_imgs or all_og_imgs
         return {
             "name": name,
-            "price": "", "image": "", "rating": "", "sold": "",
+            "price": og_price_tag["content"] + "đ" if og_price_tag else "",
+            "image": all_imgs[0] if all_imgs else og_img_url,
+            "images": all_imgs or ([og_img_url] if og_img_url else []),
+            "rating": "", "sold": "",
             "commission": "Xem dashboard affiliate",
-            "description": "", "affiliate_link": ""
+            "description": og_desc["content"] if og_desc else "",
+            "affiliate_link": "",
         }
     except Exception as e:
         print(f"HTML scrape error: {e}")
