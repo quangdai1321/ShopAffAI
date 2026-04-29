@@ -5,8 +5,11 @@ import json
 import re
 import os
 import time
+import threading
+import datetime
 from dotenv import load_dotenv
 from openai import OpenAI
+from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()
 
@@ -500,6 +503,14 @@ BRAND_KEYWORDS = {
     "colgate": ["colgate"],
 }
 
+# ── DEAL CACHE ─────────────────────────────────────────────────────
+_deals_cache = {
+    "items": [],
+    "updated_at": None,   # "HH:MM DD/MM"
+    "scanning": False,
+    "error": None,
+}
+
 def _build_image_url(img_id):
     if not img_id:
         return ""
@@ -539,85 +550,142 @@ def _search_keyword(keyword):
             print(f"[deal-scan] {url} error: {e}")
     return []
 
+def _process_search_items(items, seen):
+    """Chuyển đổi raw API items thành deal objects"""
+    results = []
+    for item in items:
+        info = item.get("item_basic") or item
+        item_id = str(info.get("itemid", ""))
+        if not item_id or item_id in seen:
+            continue
+        seen.add(item_id)
+
+        price_raw    = int(info.get("price", 0) or 0)
+        price_min    = int(info.get("price_min", 0) or 0)
+        price_before = int(info.get("price_before_discount", 0) or 0)
+        price_min_before = int(info.get("price_min_before_discount", 0) or 0)
+        actual_price  = price_raw or price_min
+        actual_before = price_before or price_min_before
+        raw_discount  = int(info.get("raw_discount") or info.get("discount") or 0)
+        price_vnd        = actual_price // 100000
+        price_before_vnd = actual_before // 100000 if actual_before > actual_price else 0
+
+        if price_before_vnd > price_vnd > 0:
+            discount_pct = round((price_before_vnd - price_vnd) / price_before_vnd * 100)
+        elif raw_discount > 0:
+            discount_pct = raw_discount
+            price_before_vnd = 0
+        else:
+            discount_pct = 0
+
+        images    = info.get("images") or []
+        image_url = _build_image_url(images[0]) if images else ""
+        shop_id   = str(info.get("shopid", ""))
+        sold      = int(info.get("sold", 0) or 0)
+        sold_str  = f"{sold//1000}k+" if sold >= 1000 else (str(sold) if sold else "")
+        rating    = float((info.get("item_rating") or {}).get("rating_star", 0) or 0)
+        name      = info.get("name", "")
+
+        if not price_vnd or not name:
+            continue
+
+        results.append({
+            "name": name,
+            "price": f"{price_vnd:,}đ".replace(",", "."),
+            "price_before": f"{price_before_vnd:,}đ".replace(",", ".") if price_before_vnd else "",
+            "discount": f"-{discount_pct}%" if discount_pct >= 5 else "",
+            "discount_num": discount_pct,
+            "image": image_url,
+            "shop_id": shop_id,
+            "item_id": item_id,
+            "url": f"https://shopee.vn/product/{shop_id}/{item_id}",
+            "sold_pct": min(85, discount_pct) if discount_pct else 30,
+            "stock_left": sold_str,
+            "rating": f"⭐{rating:.1f}" if rating >= 1 else "",
+            # tag brand để filter client-side
+            "brand_tag": name.lower(),
+        })
+    return results
+
+def scan_all_deals():
+    """Background job: quét tất cả brands, lưu vào cache"""
+    global _deals_cache
+    if _deals_cache["scanning"]:
+        print("[scheduler] Already scanning, skip")
+        return
+    _deals_cache["scanning"] = True
+    print("[scheduler] Deal scan started")
+    try:
+        all_results = []
+        seen = set()
+        any_ok = False
+        for keyword in BRAND_KEYWORDS[""]:
+            raw_items = _search_keyword(keyword)
+            if raw_items:
+                any_ok = True
+            processed = _process_search_items(raw_items, seen)
+            all_results.extend(processed)
+            time.sleep(0.5)  # tránh rate limit
+
+        all_results.sort(key=lambda x: x["discount_num"], reverse=True)
+        for r in all_results:
+            del r["discount_num"]
+
+        now = datetime.datetime.now().strftime("%H:%M %d/%m")
+        if any_ok:
+            _deals_cache["items"] = all_results[:60]
+            _deals_cache["updated_at"] = now
+            _deals_cache["error"] = None
+            print(f"[scheduler] Cached {len(all_results)} deals at {now}")
+        else:
+            _deals_cache["error"] = "geo-blocked"
+            _deals_cache["updated_at"] = now
+            print(f"[scheduler] All APIs blocked at {now}")
+    except Exception as e:
+        print(f"[scheduler] Error: {e}")
+    finally:
+        _deals_cache["scanning"] = False
+
 @app.route("/api/flash-sale", methods=["GET"])
 def flash_sale():
     brand_filter = request.args.get("brand", "").lower().strip()
-    keywords = BRAND_KEYWORDS.get(brand_filter, [brand_filter] if brand_filter else BRAND_KEYWORDS[""])
+    items = _deals_cache.get("items") or []
+    updated_at = _deals_cache.get("updated_at")
+    scanning = _deals_cache.get("scanning", False)
 
-    results = []
-    seen = set()
-    api_blocked = False
+    # Filter theo brand
+    if brand_filter and items:
+        kws = BRAND_KEYWORDS.get(brand_filter, [brand_filter])
+        items = [it for it in items if any(k in it.get("brand_tag", "") for k in kws)]
 
-    for keyword in keywords[:3]:  # giới hạn 3 keyword để tránh timeout
-        items = _search_keyword(keyword)
-        if not items:
-            api_blocked = True
-            continue
+    # Xóa brand_tag khỏi response
+    clean = [{k: v for k, v in it.items() if k != "brand_tag"} for it in items]
 
-        for item in items:
-            info = item.get("item_basic") or item
-            item_id = str(info.get("itemid", ""))
-            if not item_id or item_id in seen:
-                continue
-            seen.add(item_id)
+    if not clean:
+        if scanning:
+            msg = "Đang quét lần đầu, thử lại sau 1 phút..."
+        elif _deals_cache.get("error") == "geo-blocked":
+            msg = "Server cloud bị Shopee giới hạn IP. Hãy cập nhật cookie mới tại ⚙️ Cookie rồi thử lại."
+        elif not updated_at:
+            msg = "Chưa có dữ liệu — đang quét lần đầu..."
+        else:
+            msg = "Không tìm thấy sản phẩm phù hợp."
+        return jsonify({"items": [], "message": msg, "updated_at": updated_at, "scanning": scanning})
 
-            price_raw    = int(info.get("price", 0) or 0)
-            price_min    = int(info.get("price_min", 0) or 0)
-            price_before = int(info.get("price_before_discount", 0) or 0)
-            price_min_before = int(info.get("price_min_before_discount", 0) or 0)
+    return jsonify({
+        "items": clean[:24],
+        "total": len(clean),
+        "updated_at": updated_at,
+        "scanning": scanning,
+        "session_end": 0,
+    })
 
-            actual_price  = price_raw or price_min
-            actual_before = price_before or price_min_before
-            raw_discount  = int(info.get("raw_discount") or info.get("discount") or 0)
-
-            price_vnd        = actual_price // 100000
-            price_before_vnd = actual_before // 100000 if actual_before > actual_price else 0
-
-            if price_before_vnd > price_vnd > 0:
-                discount_pct = round((price_before_vnd - price_vnd) / price_before_vnd * 100)
-            elif raw_discount > 0:
-                discount_pct = raw_discount
-                price_before_vnd = 0
-            else:
-                discount_pct = 0
-
-            images   = info.get("images") or []
-            image_url = _build_image_url(images[0]) if images else ""
-            shop_id  = str(info.get("shopid", ""))
-            sold     = int(info.get("sold", 0) or 0)
-            sold_str = f"{sold//1000}k+" if sold >= 1000 else (str(sold) if sold else "")
-            rating   = float((info.get("item_rating") or {}).get("rating_star", 0) or 0)
-
-            if not price_vnd:
-                continue
-
-            results.append({
-                "name": info.get("name", ""),
-                "price": f"{price_vnd:,}đ".replace(",", "."),
-                "price_before": f"{price_before_vnd:,}đ".replace(",", ".") if price_before_vnd else "",
-                "discount": f"-{discount_pct}%" if discount_pct >= 5 else "",
-                "discount_num": discount_pct,
-                "image": image_url,
-                "shop_id": shop_id,
-                "item_id": item_id,
-                "url": f"https://shopee.vn/product/{shop_id}/{item_id}",
-                "sold_pct": min(85, discount_pct) if discount_pct else 30,
-                "stock_left": sold_str,
-                "rating": f"⭐{rating:.1f}" if rating >= 1 else "",
-            })
-
-    if not results:
-        msg = ("Server cloud bị Shopee giới hạn truy cập tìm kiếm. "
-               "Hãy cập nhật cookie mới tại ⚙️ Cookie rồi thử lại." if api_blocked
-               else "Không tìm thấy sản phẩm cho từ khóa này.")
-        return jsonify({"items": [], "message": msg})
-
-    # Sắp xếp: ưu tiên có discount, sau đó giữ theo sold
-    results.sort(key=lambda x: x["discount_num"], reverse=True)
-    for r in results:
-        del r["discount_num"]
-
-    return jsonify({"items": results[:24], "total": len(results), "session_end": 0})
+@app.route("/api/flash-sale/refresh", methods=["POST"])
+def refresh_deals():
+    if _deals_cache.get("scanning"):
+        return jsonify({"ok": False, "message": "Đang quét rồi, chờ xíu..."})
+    threading.Thread(target=scan_all_deals, daemon=True).start()
+    return jsonify({"ok": True, "message": "Đang quét lại..."})
 
 @app.route("/settings")
 def settings_page():
@@ -666,6 +734,14 @@ def test_cookies():
     except Exception as e:
         # Nếu không kết nối được Shopee từ server, vẫn trust cookie nếu format đúng
         return jsonify({"ok": True, "message": "Cookie đã lưu ✓ (không thể ping Shopee từ server — hãy thử cào sản phẩm để xác nhận)"})
+
+# ── SCHEDULER ──────────────────────────────────────────────────────
+_scheduler = BackgroundScheduler(timezone="Asia/Ho_Chi_Minh")
+_scheduler.add_job(scan_all_deals, "interval", minutes=5, id="deal_scan", max_instances=1)
+_scheduler.start()
+# Quét lần đầu sau 10 giây (đợi server khởi động xong)
+threading.Timer(10.0, scan_all_deals).start()
+print("[scheduler] Started — will scan every 5 minutes")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

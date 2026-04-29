@@ -209,13 +209,17 @@
 
   <!-- FLASH SALE SCANNER -->
   <div class="card" style="margin-bottom:16px">
-    <div class="card-header" style="justify-content:space-between">
-      <div class="flash-title">🔥 Deal Giảm Giá Hãng Lớn</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span id="fs-countdown" class="flash-countdown hidden"></span>
-        <button class="btn btn-primary scan-btn" onclick="scanFlashSale()" id="fs-scan-btn" style="font-size:13px;padding:8px 16px">
-          <div class="scan-pulse" id="fs-pulse" style="display:none"></div>
-          🔍 Quét ngay
+    <div class="card-header" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div>
+        <div class="flash-title">🔥 Deal Giảm Giá Hãng Lớn</div>
+        <div id="fs-updated" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="fs-scanning-badge" class="hidden" style="font-size:11px;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;border-radius:6px;padding:3px 8px;font-weight:600">
+          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#27ae60;margin-right:4px;animation:pulse 1.2s infinite"></span>Đang quét...
+        </span>
+        <button class="btn btn-primary scan-btn" onclick="manualRefresh()" id="fs-scan-btn" style="font-size:13px;padding:8px 16px">
+          🔄 Quét lại
         </button>
       </div>
     </div>
@@ -231,10 +235,10 @@
         <button class="brand-btn" onclick="filterBrand('nivea',this)">🌿 Nivea</button>
         <button class="brand-btn" onclick="filterBrand('colgate',this)">🦷 Colgate</button>
       </div>
-      <div id="fs-loading" class="hidden loading"><div class="spinner"></div><p>Đang quét Flash Sale...</p></div>
+      <div id="fs-loading" class="hidden loading"><div class="spinner"></div><p>Đang tải deals...</p></div>
       <div id="fs-error" class="error-msg hidden"></div>
       <div id="fs-results">
-        <div class="flash-empty"><div class="flash-empty-icon">⚡</div><p>Nhấn <strong>Quét ngay</strong> để tìm Flash Sale hãng lớn đang diễn ra</p></div>
+        <div class="flash-empty"><div class="flash-empty-icon">⏳</div><p>Server đang quét tự động, thử lại sau ít phút...</p></div>
       </div>
       <div id="fs-meta" class="hidden" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
     </div>
@@ -700,22 +704,19 @@ function nativeShare() {
 
 // ── FLASH SALE SCANNER ──────────────────────────────────────────
 let currentBrand = '';
-let countdownTimer = null;
 let flashItems = [];
+let autoRefreshTimer = null;
 
-async function scanFlashSale() {
-  const btn = document.getElementById('fs-scan-btn');
-  const pulse = document.getElementById('fs-pulse');
+async function loadFlashSale(showSpinner = false) {
   const loading = document.getElementById('fs-loading');
-  const errEl = document.getElementById('fs-error');
+  const errEl   = document.getElementById('fs-error');
   const results = document.getElementById('fs-results');
-  const meta = document.getElementById('fs-meta');
+  const meta    = document.getElementById('fs-meta');
+  const badge   = document.getElementById('fs-scanning-badge');
+  const updated = document.getElementById('fs-updated');
 
-  btn.disabled = true;
-  btn.innerHTML = '<div class="scan-pulse" style="display:block"></div> Đang quét...';
-  loading.classList.remove('hidden');
+  if (showSpinner) { loading.classList.remove('hidden'); results.innerHTML = ''; }
   errEl.classList.add('hidden');
-  results.innerHTML = '';
   meta.classList.add('hidden');
 
   try {
@@ -723,40 +724,63 @@ async function scanFlashSale() {
     const resp = await fetch(url);
     const data = await resp.json();
 
-    if (data.error) {
-      errEl.textContent = data.error;
-      errEl.classList.remove('hidden');
-      results.innerHTML = '<div class="flash-empty"><div class="flash-empty-icon">😕</div><p>' + data.error + '</p></div>';
-      return;
-    }
+    // Badge quét đang chạy
+    if (data.scanning) badge.classList.remove('hidden');
+    else               badge.classList.add('hidden');
+
+    // Thời gian cập nhật
+    if (data.updated_at) updated.textContent = `🕐 Cập nhật lúc ${data.updated_at}`;
 
     flashItems = data.items || [];
 
     if (flashItems.length === 0) {
-      results.innerHTML = '<div class="flash-empty"><div class="flash-empty-icon">🔍</div><p>Không tìm thấy Flash Sale hãng lớn nào đang diễn ra</p></div>';
+      const msg = data.message || 'Chưa có dữ liệu, thử lại sau.';
+      results.innerHTML = `<div class="flash-empty"><div class="flash-empty-icon">${data.scanning ? '⏳' : '🔍'}</div><p>${msg}</p></div>`;
     } else {
       renderFlashItems(flashItems);
-      meta.textContent = `Tìm thấy ${data.total} sản phẩm hãng lớn đang Flash Sale`;
+      meta.textContent = `${data.total} sản phẩm · tự động cập nhật mỗi 5 phút`;
       meta.classList.remove('hidden');
     }
-
-    if (data.session_end) startCountdown(data.session_end);
-
   } catch(e) {
     errEl.textContent = 'Lỗi kết nối. Thử lại!';
     errEl.classList.remove('hidden');
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '🔍 Quét lại';
     loading.classList.add('hidden');
   }
+}
+
+async function manualRefresh() {
+  const btn = document.getElementById('fs-scan-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Đang quét...';
+  try {
+    await fetch('/api/flash-sale/refresh', { method: 'POST' });
+    // Đợi 3 giây rồi poll kết quả
+    await new Promise(r => setTimeout(r, 3000));
+    await loadFlashSale(true);
+    // Nếu vẫn đang quét thì poll thêm
+    let polls = 0;
+    const poll = setInterval(async () => {
+      polls++;
+      await loadFlashSale(false);
+      if (!_isScanning() || polls >= 20) clearInterval(poll);
+    }, 3000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 Quét lại';
+  }
+}
+
+function _isScanning() {
+  return document.getElementById('fs-scanning-badge') &&
+         !document.getElementById('fs-scanning-badge').classList.contains('hidden');
 }
 
 function renderFlashItems(items) {
   const results = document.getElementById('fs-results');
   const scroll = document.createElement('div');
   scroll.className = 'flash-scroll';
-  items.forEach(item => {
+  items.forEach((item, idx) => {
     const card = document.createElement('div');
     card.className = 'flash-item';
     card.innerHTML = `
@@ -769,7 +793,7 @@ function renderFlashItems(items) {
           ${item.discount ? `<span class="discount-badge">${item.discount}</span>` : ''}
         </div>
         <div class="stock-label" style="margin-bottom:4px">${item.rating || ''} ${item.stock_left ? '· ' + item.stock_left + ' đã bán' : ''}</div>
-        <button class="flash-cta" onclick="pickFlashItem(${items.indexOf(item)})">⚡ Cào & Tạo content</button>
+        <button class="flash-cta" onclick="pickFlashItem(${idx})">⚡ Cào & Tạo content</button>
       </div>`;
     scroll.appendChild(card);
   });
@@ -789,27 +813,14 @@ function filterBrand(brand, el) {
   currentBrand = brand;
   document.querySelectorAll('.brand-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
-  if (flashItems.length > 0) scanFlashSale();
+  loadFlashSale(false);
 }
 
-function startCountdown(endTimeSec) {
-  const el = document.getElementById('fs-countdown');
-  if (countdownTimer) clearInterval(countdownTimer);
-  // endTimeSec có thể là seconds hoặc ms
-  const endMs = endTimeSec > 9999999999 ? endTimeSec : endTimeSec * 1000;
+// Load lần đầu khi mở trang
+loadFlashSale(true);
 
-  function update() {
-    const diff = Math.max(0, endMs - Date.now());
-    if (diff === 0) { el.textContent = 'Flash Sale đã kết thúc'; clearInterval(countdownTimer); return; }
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
-    el.textContent = `⏱ Kết thúc sau ${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
-    el.classList.remove('hidden');
-  }
-  update();
-  countdownTimer = setInterval(update, 1000);
-}
+// Auto-refresh: poll mỗi 3 phút để cập nhật từ cache mới nhất
+autoRefreshTimer = setInterval(() => loadFlashSale(false), 3 * 60 * 1000);
 </script>
 </body>
 </html>
