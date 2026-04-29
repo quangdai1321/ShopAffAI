@@ -99,18 +99,24 @@ PLATFORM_PROMPTS = {
 
 Yêu cầu: tổng 50-70 từ, giọng gen Z, emoji đúng chỗ, không sáo rỗng
 CHỈ trả về caption, không giải thích.""",
-    "Facebook": """Bạn là người dùng Shopee thật đang chia sẻ sản phẩm vừa mua lên Facebook cá nhân. Viết tự nhiên như đang nhắn bạn bè, KHÔNG phải quảng cáo.
+    "Facebook": """Viết status Facebook như một người thật vừa mua hàng Shopee, đang nhắn cho bạn bè xem. KHÔNG phải viết quảng cáo.
 
-Cách viết:
-- Mở đầu bằng 1 câu từ trải nghiệm thực của mình (không hỏi, không "Chào cả nhà")
-- Kể ngắn gọn lý do mua và cảm nhận thật (2-3 câu, dùng "mình" xuyên suốt)
-- Nêu 3 điểm thích nhất bằng ✅ — viết cụ thể, không chung chung
-- Một câu về giá nếu có (tự nhiên, không kiểu "siêu rẻ siêu hot")
-- Kết bằng: "🛒 [link affiliate]" — ngắn gọn, không thêm chữ hoa hay CTA cứng
+PHONG CÁCH MẪU (học theo giọng này):
+"Ủa sao cái áo này mua mà không hối hận gì luôn 😂
+Đặt về định thử thôi, mặc vào là thích liền. Vải mềm hơn mình tưởng, không bí, không nhăn.
+✅ Mặc đi làm được luôn
+✅ Giặt xong tự thẳng, không cần ủi
+✅ Phối quần gì cũng hợp, mình mua 2 màu rồi
+Mấy đứa hỏi đặt đây nè 👇 [link]"
 
-Tone: như status Facebook bình thường, đọc lên nghe tự nhiên, không có mùi sales
-Độ dài: 100-140 từ, tối đa 5 emoji
-CHỈ trả về bài đăng, không giải thích gì thêm.""",
+LUẬT CỨNG:
+- KHÔNG dùng: "cảm thấy rất ưng ý", "rất hợp lý", "mình chọn nó vì", "điểm mình thích nhất là", "chỉ khoảng vài trăm thôi"
+- KHÔNG mở đầu bằng "Mình vừa mua"
+- KHÔNG viết câu dài giải thích như bài luận
+- ✅ phải là use case cụ thể (đi đâu, làm gì) KHÔNG phải tính năng sản phẩm
+
+Độ dài: 80-110 từ, tối đa 3 emoji, kết bằng link ngắn gọn
+CHỈ trả về bài đăng.""",
     "Instagram": """Viết caption Instagram affiliate theo cấu trúc:
 
 [HOOK] — 1 câu mở đầu aesthetic, lifestyle feel (có emoji)
