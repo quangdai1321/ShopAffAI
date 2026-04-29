@@ -389,8 +389,8 @@ function showProduct(p) {
 }
 
 function openAffDashboard() {
-  const url = productData
-    ? `https://affiliate.shopee.vn/offer/product_offer?itemId=${productData.item_id}&shopId=${productData.shop_id}`
+  const url = productData && productData.item_id
+    ? `https://affiliate.shopee.vn/offer/product_offer/${productData.item_id}`
     : 'https://affiliate.shopee.vn/offer/product_offer';
   window.open(url, '_blank');
 }
