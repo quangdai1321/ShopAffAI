@@ -22,10 +22,25 @@ def get_openai_client():
         _openai_client = OpenAI(api_key=api_key)
     return _openai_client
 
-SHOPEE_COOKIES = {
-    "SPC_EC": os.getenv("SHOPEE_SPC_EC", ""),
-    "SPC_F":  os.getenv("SHOPEE_SPC_F", ""),
-}
+COOKIES_FILE = os.path.join(os.path.dirname(__file__), "cookies.json")
+
+def get_cookies():
+    if os.path.exists(COOKIES_FILE):
+        try:
+            with open(COOKIES_FILE, "r") as f:
+                data = json.load(f)
+            if data.get("SPC_EC") or data.get("SPC_F"):
+                return data
+        except:
+            pass
+    return {
+        "SPC_EC": os.getenv("SHOPEE_SPC_EC", ""),
+        "SPC_F":  os.getenv("SHOPEE_SPC_F", ""),
+    }
+
+def save_cookies(spc_ec, spc_f):
+    with open(COOKIES_FILE, "w") as f:
+        json.dump({"SPC_EC": spc_ec, "SPC_F": spc_f}, f)
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -115,7 +130,7 @@ def get_affiliate_link(item_id, shop_id):
         }
         resp = requests.post(
             "https://affiliate.shopee.vn/api/v2/link/generate",
-            headers=headers, cookies=SHOPEE_COOKIES, json=payload, timeout=10
+            headers=headers, cookies=get_cookies(), json=payload, timeout=10
         )
         data = resp.json()
         return (data.get("data") or {}).get("short_link", "")
@@ -132,7 +147,7 @@ def scrape_shopee_api(shop_id, item_id):
     ]
     for url in endpoints:
         try:
-            resp = requests.get(url, headers=HEADERS, cookies=SHOPEE_COOKIES, timeout=12)
+            resp = requests.get(url, headers=HEADERS, cookies=get_cookies(), timeout=12)
             raw = resp.json()
             # v4 format
             item = raw.get("data") or raw.get("item") or {}
@@ -314,7 +329,7 @@ def flash_sale():
     try:
         sessions_resp = requests.get(
             "https://shopee.vn/api/v4/flash_sale/get_all_sessions",
-            headers=HEADERS, cookies=SHOPEE_COOKIES, timeout=10
+            headers=HEADERS, cookies=get_cookies(), timeout=10
         )
         sessions_data = sessions_resp.json()
         sessions_list = (sessions_data.get("data") or {}).get("sessions", [])
@@ -342,7 +357,7 @@ def flash_sale():
         items_resp = requests.get(
             "https://shopee.vn/api/v4/flash_sale/get_items_by_session_id",
             params={"promotionid": promo_id, "category_id": 0, "order": 0, "offset": 0, "limit": 100},
-            headers=HEADERS, cookies=SHOPEE_COOKIES, timeout=12
+            headers=HEADERS, cookies=get_cookies(), timeout=12
         )
         items_data = items_resp.json()
         raw_items = (items_data.get("data") or {}).get("items", [])
@@ -396,6 +411,43 @@ def flash_sale():
     except Exception as e:
         print(f"Flash sale error: {e}")
         return jsonify({"error": f"Lỗi quét Flash Sale: {str(e)}", "items": []})
+
+@app.route("/settings")
+def settings_page():
+    cookies = get_cookies()
+    return render_template("settings.html",
+        has_spc_ec=bool(cookies.get("SPC_EC")),
+        has_spc_f=bool(cookies.get("SPC_F")),
+    )
+
+@app.route("/api/settings/cookies", methods=["POST"])
+def update_cookies():
+    data = request.json
+    spc_ec = (data.get("SPC_EC") or "").strip()
+    spc_f  = (data.get("SPC_F")  or "").strip()
+    if not spc_ec or not spc_f:
+        return jsonify({"error": "Vui lòng nhập đủ SPC_EC và SPC_F"}), 400
+    save_cookies(spc_ec, spc_f)
+    return jsonify({"ok": True, "message": "Đã lưu cookie thành công!"})
+
+@app.route("/api/settings/test", methods=["GET"])
+def test_cookies():
+    try:
+        resp = requests.get(
+            "https://shopee.vn/api/v4/account/basic",
+            headers=HEADERS, cookies=get_cookies(), timeout=8
+        )
+        data = resp.json()
+        user = (data.get("data") or {})
+        username = user.get("username") or user.get("email") or ""
+        if username:
+            return jsonify({"ok": True, "message": f"Cookie hợp lệ · Tài khoản: {username}"})
+        # fallback: nếu không lấy được user, check status code
+        if resp.status_code == 200 and data.get("error", -1) == 0:
+            return jsonify({"ok": True, "message": "Cookie hợp lệ ✓"})
+        return jsonify({"ok": False, "message": "Cookie đã hết hạn hoặc không hợp lệ"})
+    except Exception as e:
+        return jsonify({"ok": False, "message": f"Lỗi kết nối: {str(e)}"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
