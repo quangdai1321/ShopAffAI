@@ -90,25 +90,45 @@ HOT_HOURS = {
 }
 
 PLATFORM_PROMPTS = {
-    "TikTok": """Viết caption TikTok affiliate cho sản phẩm Shopee. Yêu cầu:
-- Hook mạnh 3 giây đầu
-- Ngắn gọn 50-80 từ, có emoji trending
-- Kêu gọi "Link trong bio"
-- 5-8 hashtag viral (#fyp #shopee #dealngon)
+    "TikTok": """Viết caption TikTok affiliate cho sản phẩm Shopee theo cấu trúc:
+
+[HOOK] — 1 câu đầu gây sốc hoặc gây tò mò cực mạnh (KHÔNG hỏi, phải khẳng định)
+[PROOF] — 1-2 câu nêu lợi ích thực tế / con số cụ thể
+[CTA] — "Link trong bio 👇" hoặc "Bình luận LINK mình gửi ngay"
+[HASHTAG] — 5-7 hashtag: mix #fyp #shopee + hashtag niche sản phẩm
+
+Yêu cầu: tổng 50-70 từ, giọng gen Z, emoji đúng chỗ, không sáo rỗng
 CHỈ trả về caption, không giải thích.""",
-    "Facebook": """Viết bài đăng Facebook affiliate. Yêu cầu:
-- Tự nhiên như người thật review, 100-150 từ
-- Liệt kê 3-4 điểm nổi bật bằng ✅
-- Giá + link rõ ràng ở cuối
+    "Facebook": """Viết bài đăng Facebook affiliate theo cấu trúc sau, tự nhiên như người thật đang chia sẻ:
+
+[HOOK] — 1 câu mở đầu gây tò mò hoặc đồng cảm (có emoji)
+[STORY] — 2-3 câu ngắn kể tại sao mua / trải nghiệm thực tế
+[ĐIỂM NỔI BẬT] — 3-4 dòng, mỗi dòng bắt đầu bằng ✅, nêu lợi ích cụ thể
+[GIÁ & CTA] — Nhấn mạnh giá (nếu có), kêu gọi hành động mạnh
+[LINK] — Dòng cuối: "🛒 Xem & đặt hàng tại đây: [link affiliate]"
+
+Yêu cầu thêm:
+- Tổng 120-160 từ, giọng văn gần gũi, không cứng nhắc
+- Dùng emoji hợp lý (không quá 6 emoji)
+- KHÔNG viết "Chào cả nhà" — bắt đầu thẳng vào hook
 CHỈ trả về nội dung bài đăng, không giải thích.""",
-    "Instagram": """Viết caption Instagram affiliate. Yêu cầu:
-- Aesthetic, lifestyle feel, 60-80 từ
-- Emoji đẹp, link in bio CTA
-- 10-15 hashtag mix trending + niche
+    "Instagram": """Viết caption Instagram affiliate theo cấu trúc:
+
+[HOOK] — 1 câu mở đầu aesthetic, lifestyle feel (có emoji)
+[VIBE] — 2-3 câu tả cảm giác / trải nghiệm dùng sản phẩm, viết như đang sống trong khoảnh khắc đó
+[CTA] — "Link in bio 🔗" + gợi ý hành động (save, share, tag bạn)
+[HASHTAG] — 10-12 hashtag: mix trending + niche + tiếng Việt
+
+Yêu cầu: 70-90 từ, giọng nhẹ nhàng cuốn hút, không quảng cáo lộ liễu
 CHỈ trả về caption, không giải thích.""",
-    "Zalo": """Viết tin nhắn Zalo affiliate. Yêu cầu:
-- Thân thiện như nhắn bạn bè, 40-60 từ
-- Tự nhiên, không quá sales, có link
+    "Zalo": """Viết tin nhắn Zalo affiliate theo cấu trúc:
+
+[MỞ] — 1 câu tự nhiên như đang nhắn bạn thật (ví dụ: "Ê, tao vừa mua cái này...")
+[CHIA SẺ] — 2-3 câu kể thật trải nghiệm, nêu 1-2 điểm thích nhất
+[GỢI Ý] — Gợi ý nhẹ nhàng không ép mua, kèm link
+[EMOJI] — Dùng 2-3 emoji phù hợp, không quá nhiều
+
+Yêu cầu: 45-60 từ, giọng bạn bè thân thiết, tuyệt đối không có mùi sales
 CHỈ trả về tin nhắn, không giải thích.""",
 }
 
