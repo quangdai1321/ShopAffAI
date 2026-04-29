@@ -116,6 +116,38 @@
   .mt-12 { margin-top: 12px; }
   .flex { display: flex; }
   .flex-1 { flex: 1; }
+
+  /* FLASH SALE SECTION */
+  .flash-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .flash-title { font-size: 16px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 6px; }
+  .flash-countdown { font-size: 12px; background: #fff3e0; color: #e67e22; border: 1px solid #f0a500; border-radius: 6px; padding: 4px 10px; font-weight: 700; }
+  .brand-filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .brand-btn { padding: 5px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); color: var(--muted); background: white; transition: all 0.2s; }
+  .brand-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .brand-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+  .flash-scroll { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 8px; }
+  .flash-scroll::-webkit-scrollbar { height: 4px; }
+  .flash-scroll::-webkit-scrollbar-track { background: var(--border); border-radius: 4px; }
+  .flash-scroll::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 4px; }
+  .flash-item { flex-shrink: 0; width: 160px; border: 1.5px solid var(--border); border-radius: 10px; overflow: hidden; background: white; transition: all 0.2s; cursor: pointer; }
+  .flash-item:hover { border-color: var(--primary); box-shadow: 0 4px 16px rgba(238,77,45,0.15); transform: translateY(-2px); }
+  .flash-item img { width: 100%; height: 120px; object-fit: cover; background: #f5f5f5; }
+  .flash-item-body { padding: 8px 10px; }
+  .flash-item-name { font-size: 12px; font-weight: 600; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 6px; height: 33px; }
+  .flash-prices { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+  .flash-price { font-size: 13px; font-weight: 700; color: var(--primary); }
+  .flash-price-before { font-size: 11px; color: var(--muted); text-decoration: line-through; }
+  .discount-badge { font-size: 10px; font-weight: 700; background: var(--primary); color: white; padding: 2px 5px; border-radius: 4px; }
+  .stock-bar-wrap { background: #eee; border-radius: 4px; height: 4px; margin-bottom: 6px; overflow: hidden; }
+  .stock-bar { height: 100%; background: linear-gradient(90deg, #f0a500, var(--primary)); border-radius: 4px; transition: width 0.3s; }
+  .stock-label { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+  .flash-cta { width: 100%; padding: 6px; font-size: 11px; font-weight: 700; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+  .flash-cta:hover { background: #d63d1e; }
+  .flash-empty { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 14px; }
+  .flash-empty-icon { font-size: 40px; margin-bottom: 8px; }
+  .scan-btn { display: flex; align-items: center; gap: 6px; }
+  .scan-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.4); } }
 </style>
 </head>
 <body>
@@ -129,6 +161,40 @@
 </div>
 
 <div class="container">
+
+  <!-- FLASH SALE SCANNER -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header" style="justify-content:space-between">
+      <div class="flash-title">⚡ Flash Sale Hãng Lớn</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span id="fs-countdown" class="flash-countdown hidden"></span>
+        <button class="btn btn-primary scan-btn" onclick="scanFlashSale()" id="fs-scan-btn" style="font-size:13px;padding:8px 16px">
+          <div class="scan-pulse" id="fs-pulse" style="display:none"></div>
+          🔍 Quét ngay
+        </button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="brand-filters" id="brand-filters">
+        <button class="brand-btn active" onclick="filterBrand('',this)">Tất cả hãng</button>
+        <button class="brand-btn" onclick="filterBrand('vinamilk',this)">🥛 Vinamilk</button>
+        <button class="brand-btn" onclick="filterBrand('omo',this)">🧺 OMO</button>
+        <button class="brand-btn" onclick="filterBrand('milo',this)">🍫 Milo</button>
+        <button class="brand-btn" onclick="filterBrand('dove',this)">🕊️ Dove</button>
+        <button class="brand-btn" onclick="filterBrand('pantene',this)">💆 Pantene</button>
+        <button class="brand-btn" onclick="filterBrand('huggies',this)">👶 Huggies</button>
+        <button class="brand-btn" onclick="filterBrand('nivea',this)">🌿 Nivea</button>
+        <button class="brand-btn" onclick="filterBrand('colgate',this)">🦷 Colgate</button>
+      </div>
+      <div id="fs-loading" class="hidden loading"><div class="spinner"></div><p>Đang quét Flash Sale...</p></div>
+      <div id="fs-error" class="error-msg hidden"></div>
+      <div id="fs-results">
+        <div class="flash-empty"><div class="flash-empty-icon">⚡</div><p>Nhấn <strong>Quét ngay</strong> để tìm Flash Sale hãng lớn đang diễn ra</p></div>
+      </div>
+      <div id="fs-meta" class="hidden" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+    </div>
+  </div>
+
   <div class="grid">
 
     <!-- CỘT TRÁI -->
@@ -397,6 +463,121 @@ function confirmSchedule() {
 }
 
 buildSchedule();
+
+// ── FLASH SALE SCANNER ──────────────────────────────────────────
+let currentBrand = '';
+let countdownTimer = null;
+let flashItems = [];
+
+async function scanFlashSale() {
+  const btn = document.getElementById('fs-scan-btn');
+  const pulse = document.getElementById('fs-pulse');
+  const loading = document.getElementById('fs-loading');
+  const errEl = document.getElementById('fs-error');
+  const results = document.getElementById('fs-results');
+  const meta = document.getElementById('fs-meta');
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="scan-pulse" style="display:block"></div> Đang quét...';
+  loading.classList.remove('hidden');
+  errEl.classList.add('hidden');
+  results.innerHTML = '';
+  meta.classList.add('hidden');
+
+  try {
+    const url = `/api/flash-sale${currentBrand ? '?brand=' + encodeURIComponent(currentBrand) : ''}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.error) {
+      errEl.textContent = data.error;
+      errEl.classList.remove('hidden');
+      results.innerHTML = '<div class="flash-empty"><div class="flash-empty-icon">😕</div><p>' + data.error + '</p></div>';
+      return;
+    }
+
+    flashItems = data.items || [];
+
+    if (flashItems.length === 0) {
+      results.innerHTML = '<div class="flash-empty"><div class="flash-empty-icon">🔍</div><p>Không tìm thấy Flash Sale hãng lớn nào đang diễn ra</p></div>';
+    } else {
+      renderFlashItems(flashItems);
+      meta.textContent = `Tìm thấy ${data.total} sản phẩm hãng lớn đang Flash Sale`;
+      meta.classList.remove('hidden');
+    }
+
+    if (data.session_end) startCountdown(data.session_end);
+
+  } catch(e) {
+    errEl.textContent = 'Lỗi kết nối. Thử lại!';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔍 Quét lại';
+    loading.classList.add('hidden');
+  }
+}
+
+function renderFlashItems(items) {
+  const results = document.getElementById('fs-results');
+  const scroll = document.createElement('div');
+  scroll.className = 'flash-scroll';
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'flash-item';
+    card.innerHTML = `
+      <img src="${item.image || ''}" alt="" onerror="this.style.display='none'">
+      <div class="flash-item-body">
+        <div class="flash-item-name">${item.name}</div>
+        <div class="flash-prices">
+          <span class="flash-price">${item.price}</span>
+          ${item.price_before ? `<span class="flash-price-before">${item.price_before}</span>` : ''}
+          ${item.discount ? `<span class="discount-badge">${item.discount}</span>` : ''}
+        </div>
+        ${item.sold_pct > 0 ? `
+        <div class="stock-bar-wrap"><div class="stock-bar" style="width:${item.sold_pct}%"></div></div>
+        <div class="stock-label">Đã bán ${item.sold_pct}% · Còn ${item.stock_left}</div>` : ''}
+        <button class="flash-cta" onclick="pickFlashItem(${items.indexOf(item)})">⚡ Cào & Tạo content</button>
+      </div>`;
+    scroll.appendChild(card);
+  });
+  results.innerHTML = '';
+  results.appendChild(scroll);
+}
+
+function pickFlashItem(idx) {
+  const item = flashItems[idx];
+  if (!item || !item.url) return;
+  document.getElementById('shopee-url').value = item.url;
+  document.getElementById('shopee-url').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  scrapeProduct();
+}
+
+function filterBrand(brand, el) {
+  currentBrand = brand;
+  document.querySelectorAll('.brand-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  if (flashItems.length > 0) scanFlashSale();
+}
+
+function startCountdown(endTimeSec) {
+  const el = document.getElementById('fs-countdown');
+  if (countdownTimer) clearInterval(countdownTimer);
+  // endTimeSec có thể là seconds hoặc ms
+  const endMs = endTimeSec > 9999999999 ? endTimeSec : endTimeSec * 1000;
+
+  function update() {
+    const diff = Math.max(0, endMs - Date.now());
+    if (diff === 0) { el.textContent = 'Flash Sale đã kết thúc'; clearInterval(countdownTimer); return; }
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    el.textContent = `⏱ Kết thúc sau ${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+    el.classList.remove('hidden');
+  }
+  update();
+  countdownTimer = setInterval(update, 1000);
+}
 </script>
 </body>
 </html>
