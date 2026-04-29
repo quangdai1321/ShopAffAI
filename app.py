@@ -370,109 +370,89 @@ Link affiliate: {affiliate_link}"""
 def get_hot_hours():
     return jsonify(HOT_HOURS)
 
+BRAND_KEYWORDS = {
+    "": ["vinamilk", "omo", "milo", "dove", "pantene", "nivea", "colgate", "huggies", "comfort", "lifebuoy"],
+    "vinamilk": ["vinamilk"],
+    "omo": ["omo"],
+    "milo": ["milo"],
+    "dove": ["dove"],
+    "pantene": ["pantene"],
+    "huggies": ["huggies"],
+    "nivea": ["nivea"],
+    "colgate": ["colgate"],
+}
+
 @app.route("/api/flash-sale", methods=["GET"])
 def flash_sale():
     brand_filter = request.args.get("brand", "").lower().strip()
+    keywords = BRAND_KEYWORDS.get(brand_filter, [brand_filter] if brand_filter else BRAND_KEYWORDS[""])
 
-    try:
-        sessions_resp = requests.get(
-            "https://shopee.vn/api/v4/flash_sale/get_all_sessions",
-            headers=get_headers(), cookies=get_cookies(), timeout=10
-        )
-        print(f"[flash-sale] sessions status={sessions_resp.status_code} body={sessions_resp.text[:300]}")
-        sessions_data = sessions_resp.json()
-        sessions_list = (sessions_data.get("data") or {}).get("sessions", [])
-
-        if not sessions_list:
-            # Thử endpoint thay thế
-            sessions_resp2 = requests.get(
-                "https://shopee.vn/api/v4/flash_sale/get_all_sessions?limit=8",
+    results = []
+    for keyword in keywords:
+        try:
+            resp = requests.get(
+                "https://shopee.vn/api/v4/search/search_items",
+                params={
+                    "keyword": keyword,
+                    "limit": 20,
+                    "newest": 0,
+                    "order": "desc",
+                    "by": "sales",
+                    "version": 2,
+                    "page_type": "search",
+                    "scenario": "PAGE_GLOBAL_SEARCH",
+                    "match_id": 0,
+                },
                 headers=get_headers(), cookies=get_cookies(), timeout=10
             )
-            print(f"[flash-sale] sessions2 status={sessions_resp2.status_code} body={sessions_resp2.text[:300]}")
-            sessions_data = sessions_resp2.json()
-            sessions_list = (sessions_data.get("data") or {}).get("sessions", [])
+            print(f"[deal-scan] keyword={keyword} status={resp.status_code} body={resp.text[:200]}")
+            data = resp.json()
+            items = (data.get("data") or {}).get("items", [])
 
-        if not sessions_list:
-            raw_body = sessions_resp.text[:500]
-            return jsonify({"items": [], "message": f"Shopee không trả về session Flash Sale. Response: {raw_body}"})
-
-        now_ms = int(time.time()) * 1000
-        active = None
-        for s in sessions_list:
-            start = s.get("start_time", 0)
-            end = s.get("end_time", 0)
-            if start < 9999999999:
-                start *= 1000
-                end *= 1000
-            if start <= now_ms <= end:
-                active = s
-                break
-        if not active:
-            active = sessions_list[0]
-
-        promo_id = active.get("promotionid") or active.get("promotion_id")
-        end_time = active.get("end_time", 0)
-
-        items_resp = requests.get(
-            "https://shopee.vn/api/v4/flash_sale/get_items_by_session_id",
-            params={"promotionid": promo_id, "category_id": 0, "order": 0, "offset": 0, "limit": 100},
-            headers=get_headers(), cookies=get_cookies(), timeout=12
-        )
-        print(f"[flash-sale] items status={items_resp.status_code} body={items_resp.text[:300]}")
-        items_data = items_resp.json()
-        raw_items = (items_data.get("data") or {}).get("items", [])
-        print(f"[flash-sale] promo_id={promo_id} raw_items={len(raw_items)}")
-
-        brands_to_check = [brand_filter] if brand_filter else BIG_BRANDS
-        results = []
-
-        for item in raw_items:
-            name = item.get("name") or ""
-            if not any(b in name.lower() for b in brands_to_check):
-                continue
-
-            price_raw = int(item.get("price", 0) or 0)
-            price_before_raw = int(item.get("price_before_discount", 0) or 0)
-            price_vnd = price_raw // 100000
-            price_before_vnd = price_before_raw // 100000
-
-            discount_pct = 0
-            if price_before_vnd > price_vnd > 0:
+            for item in items:
+                info = item.get("item_basic") or item
+                price_raw = int(info.get("price", 0) or 0)
+                price_before_raw = int(info.get("price_before_discount", 0) or 0)
+                if price_before_raw <= price_raw or price_raw == 0:
+                    continue
+                price_vnd = price_raw // 100000
+                price_before_vnd = price_before_raw // 100000
                 discount_pct = round((price_before_vnd - price_vnd) / price_before_vnd * 100)
+                if discount_pct < 10:
+                    continue
 
-            images = item.get("images") or []
-            if not images:
-                img = item.get("image")
-                images = [img] if img else []
-            image_url = f"https://down-vn.img.susercontent.com/file/{images[0]}" if images else ""
+                images = info.get("images") or []
+                image_url = f"https://down-vn.img.susercontent.com/file/{images[0]}" if images else ""
+                shop_id = str(info.get("shopid", ""))
+                item_id = str(info.get("itemid", ""))
+                sold = info.get("sold", 0) or 0
+                sold_str = f"{int(sold)//1000}k+" if int(sold) >= 1000 else str(sold)
 
-            total_stock = item.get("flash_sale_stock", 0) or 0
-            sold_count = item.get("flash_sale_sold_count", 0) or 0
-            stock_left = max(0, total_stock - sold_count)
-            sold_pct = round(sold_count / total_stock * 100) if total_stock > 0 else 0
+                results.append({
+                    "name": info.get("name", ""),
+                    "price": f"{price_vnd:,}đ".replace(",", "."),
+                    "price_before": f"{price_before_vnd:,}đ".replace(",", "."),
+                    "discount": f"-{discount_pct}%",
+                    "discount_num": discount_pct,
+                    "image": image_url,
+                    "shop_id": shop_id,
+                    "item_id": item_id,
+                    "url": f"https://shopee.vn/product/{shop_id}/{item_id}",
+                    "sold_pct": min(90, discount_pct),
+                    "stock_left": sold_str,
+                })
+        except Exception as e:
+            print(f"[deal-scan] keyword={keyword} error: {e}")
+            continue
 
-            shop_id = str(item.get("shopid", "") or item.get("shop_id", ""))
-            item_id = str(item.get("itemid", "") or item.get("item_id", ""))
+    if not results:
+        return jsonify({"items": [], "message": "Không tìm thấy deal giảm giá. Hãy cập nhật cookie mới."})
 
-            results.append({
-                "name": name,
-                "price": f"{price_vnd:,}đ".replace(",", ".") if price_vnd else "",
-                "price_before": f"{price_before_vnd:,}đ".replace(",", ".") if price_before_vnd > price_vnd else "",
-                "discount": f"-{discount_pct}%" if discount_pct >= 5 else "",
-                "image": image_url,
-                "shop_id": shop_id,
-                "item_id": item_id,
-                "url": f"https://shopee.vn/product/{shop_id}/{item_id}" if shop_id and item_id else "",
-                "stock_left": stock_left,
-                "sold_pct": sold_pct,
-            })
+    results.sort(key=lambda x: x["discount_num"], reverse=True)
+    for r in results:
+        del r["discount_num"]
 
-        return jsonify({"items": results[:24], "total": len(results), "session_end": end_time})
-
-    except Exception as e:
-        print(f"Flash sale error: {e}")
-        return jsonify({"error": f"Lỗi quét Flash Sale: {str(e)}", "items": []})
+    return jsonify({"items": results[:24], "total": len(results), "session_end": 0})
 
 @app.route("/settings")
 def settings_page():
