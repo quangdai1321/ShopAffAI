@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shopee Affiliate AI</title>
+<style>
+  :root {
+    --primary: #EE4D2D;
+    --primary-light: #fff3f0;
+    --bg: #f5f5f5;
+    --card: #ffffff;
+    --text: #222222;
+    --muted: #666666;
+    --border: #e8e8e8;
+    --success: #27ae60;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* HEADER */
+  .header { background: var(--primary); padding: 16px 24px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(238,77,45,0.3); }
+  .header-logo { width: 36px; height: 36px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .header h1 { color: white; font-size: 18px; font-weight: 600; }
+  .header p { color: rgba(255,255,255,0.85); font-size: 12px; }
+
+  /* LAYOUT */
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media(max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+  /* CARDS */
+  .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .card-header .step-num { width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: white; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .card-header h2 { font-size: 14px; font-weight: 600; color: var(--text); }
+  .card-body { padding: 18px; }
+
+  /* INPUTS */
+  input[type=text], textarea, select {
+    width: 100%; padding: 10px 14px; border: 1.5px solid var(--border);
+    border-radius: 8px; font-size: 14px; color: var(--text);
+    background: white; outline: none; transition: border-color 0.2s;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--primary); }
+  textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
+  label { font-size: 13px; color: var(--muted); margin-bottom: 6px; display: block; font-weight: 500; }
+
+  /* BUTTONS */
+  .btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: #d63d1e; transform: translateY(-1px); }
+  .btn-primary:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+  .btn-outline { background: white; color: var(--primary); border: 1.5px solid var(--primary); }
+  .btn-outline:hover { background: var(--primary-light); }
+  .btn-success { background: var(--success); color: white; }
+  .btn-block { width: 100%; margin-top: 12px; }
+
+  /* PLATFORM TABS */
+  .platform-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .platform-tab { padding: 7px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); color: var(--muted); background: white; transition: all 0.2s; }
+  .platform-tab:hover { border-color: var(--primary); color: var(--primary); }
+  .platform-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+  /* PRODUCT PREVIEW */
+  .product-preview { display: flex; gap: 14px; padding: 14px; background: var(--primary-light); border-radius: 10px; border: 1px solid rgba(238,77,45,0.15); }
+  .product-preview img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; flex-shrink: 0; border: 1px solid var(--border); }
+  .product-preview .placeholder-img { width: 80px; height: 80px; background: #eee; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 32px; flex-shrink: 0; }
+  .product-name { font-size: 14px; font-weight: 600; line-height: 1.4; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 600; }
+  .badge-red { background: #ffe0da; color: #c0392b; }
+  .badge-orange { background: #fff3e0; color: #e67e22; }
+  .badge-blue { background: #e3f2fd; color: #1565c0; }
+  .badge-green { background: #e8f5e9; color: #2e7d32; }
+
+  /* OUTPUT */
+  .output-container { position: relative; }
+  .output-text { background: #fafafa; border: 1.5px solid var(--border); border-radius: 8px; padding: 14px; font-size: 14px; line-height: 1.75; color: var(--text); white-space: pre-wrap; min-height: 160px; }
+  .copy-btn { position: absolute; top: 8px; right: 8px; font-size: 12px; padding: 5px 12px; border-radius: 6px; }
+
+  /* SCHEDULE */
+  .schedule-header { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .schedule-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .day-col { }
+  .day-label { font-size: 11px; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 4px; text-transform: uppercase; }
+  .time-slot { font-size: 10px; padding: 5px 2px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); color: var(--muted); background: white; text-align: center; margin-bottom: 3px; transition: all 0.15s; line-height: 1.2; }
+  .time-slot:hover { border-color: var(--primary); color: var(--primary); }
+  .time-slot.hot { background: #fff3e0; color: #e67e22; border-color: #f0a500; font-weight: 700; }
+  .time-slot.selected { background: var(--primary); color: white !important; border-color: var(--primary); }
+  .legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* SELECTED TIME */
+  .selected-time-box { margin-top: 12px; padding: 12px 16px; background: var(--primary-light); border-radius: 8px; border: 1px solid rgba(238,77,45,0.2); display: flex; justify-content: space-between; align-items: center; }
+  .selected-time-box strong { font-size: 14px; color: var(--primary); }
+
+  /* HISTORY */
+  .history-item { padding: 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s; }
+  .history-item:hover { border-color: var(--primary); background: var(--primary-light); }
+  .history-platform { font-size: 11px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+  .history-content { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* STATES */
+  .hidden { display: none !important; }
+  .loading { text-align: center; padding: 24px; color: var(--muted); }
+  .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-msg { color: #c0392b; font-size: 13px; padding: 8px 0; }
+  .success-msg { color: var(--success); font-size: 13px; padding: 8px 0; }
+  .gap-8 { gap: 8px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .flex { display: flex; }
+  .flex-1 { flex: 1; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">🛒</div>
+  <div>
+    <h1>Shopee Affiliate AI</h1>
+    <p>Cào sản phẩm → Tạo nội dung → Lên lịch đăng</p>
+  </div>
+</div>
+
+<div class="container">
+  <div class="grid">
+
+    <!-- CỘT TRÁI -->
+    <div>
+
+      <!-- BƯỚC 1: Link sản phẩm -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="step-num">1</div>
+          <h2>Link sản phẩm Shopee</h2>
+        </div>
+        <div class="card-body">
+          <label>Link sản phẩm</label>
+          <div class="flex gap-8">
+            <input type="text" id="shopee-url" placeholder="https://shopee.vn/product/... hoặc https://s.shopee.vn/..." style="flex:1" />
+            <button class="btn btn-primary" onclick="scrapeProduct()" id="scrape-btn">Cào</button>
+          </div>
+          <div class="mt-8">
+            <label>Link affiliate của bạn</label>
+            <input type="text" id="affiliate-link" placeholder="https://s.shopee.vn/xxxxxxxxx" />
+          </div>
+          <div id="scrape-error" class="error-msg hidden"></div>
+
+          <!-- PRODUCT PREVIEW -->
+          <div id="product-preview" class="hidden mt-12">
+            <div class="product-preview" id="product-card">
+              <div class="placeholder-img" id="prod-img-placeholder">🛍️</div>
+              <img id="prod-img" class="hidden" alt="product" />
+              <div>
+                <div class="product-name" id="prod-name"></div>
+                <div class="badges">
+                  <span class="badge badge-red" id="prod-price"></span>
+                  <span class="badge badge-orange" id="prod-commission"></span>
+                  <span class="badge badge-blue" id="prod-rating"></span>
+                  <span class="badge badge-green" id="prod-sold"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BƯỚC 2: Chọn nền tảng & tạo content -->
+      <div class="card" id="step2" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="step-num">2</div>
+          <h2>Chọn nền tảng & tạo nội dung</h2>
+        </div>
+        <div class="card-body">
+          <label>Nền tảng đăng bài</label>
+          <div class="platform-tabs">
+            <button class="platform-tab active" onclick="selectPlatform('TikTok',this)">🎵 TikTok</button>
+            <button class="platform-tab" onclick="selectPlatform('Facebook',this)">📘 Facebook</button>
+            <button class="platform-tab" onclick="selectPlatform('Instagram',this)">📸 Instagram</button>
+            <button class="platform-tab" onclick="selectPlatform('Zalo',this)">💬 Zalo</button>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="generateContent()" id="gen-btn">✦ Tạo nội dung AI</button>
+        </div>
+      </div>
+
+      <!-- LỊCH SỬ -->
+      <div class="card" id="history-card" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="step-num">📋</div>
+          <h2>Lịch sử tạo nội dung</h2>
+        </div>
+        <div class="card-body" id="history-list">
+          <p style="font-size:13px;color:var(--muted)">Chưa có nội dung nào được tạo.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CỘT PHẢI -->
+    <div>
+
+      <!-- OUTPUT -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <div class="step-num">3</div>
+          <h2>Nội dung được tạo</h2>
+        </div>
+        <div class="card-body">
+          <div id="gen-loading" class="hidden loading">
+            <div class="spinner"></div>
+            <p>AI đang tạo nội dung...</p>
+          </div>
+          <div class="output-container">
+            <div class="output-text" id="ai-output">Nội dung sẽ xuất hiện tại đây sau khi bạn nhấn "Tạo nội dung AI"...</div>
+            <button class="btn btn-outline copy-btn" onclick="copyContent()">Sao chép</button>
+          </div>
+          <div id="copy-success" class="hidden success-msg">✓ Đã sao chép vào clipboard!</div>
+        </div>
+      </div>
+
+      <!-- LỊCH ĐĂNG BÀI -->
+      <div class="card">
+        <div class="card-header">
+          <div class="step-num">4</div>
+          <h2>Lịch đăng tối ưu</h2>
+        </div>
+        <div class="card-body">
+          <div class="legend" style="margin-bottom:10px">
+            <div class="legend-item"><div class="legend-dot" style="background:#f0a500"></div> Giờ vàng</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--primary)"></div> Đã chọn</div>
+          </div>
+          <div class="schedule-grid" id="schedule-grid"></div>
+          <div id="selected-time-box" class="hidden selected-time-box">
+            <div>
+              <div style="font-size:12px;color:var(--muted)">Đã chọn lịch đăng</div>
+              <strong id="selected-time-label"></strong>
+            </div>
+            <button class="btn btn-success" style="font-size:13px;padding:8px 16px" onclick="confirmSchedule()">Xác nhận ↗</button>
+          </div>
+          <div id="schedule-confirm" class="hidden success-msg mt-8">✓ Đã lưu lịch đăng!</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const HOT_HOURS = {{ hot_hours | tojson }};
+const DAYS = ['T2','T3','T4','T5','T6','T7','CN'];
+const ALL_TIMES = ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00'];
+
+let currentPlatform = 'TikTok';
+let selectedSchedule = null;
+let productData = null;
+let history = [];
+
+function selectPlatform(p, el) {
+  currentPlatform = p;
+  document.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  buildSchedule();
+}
+
+async function scrapeProduct() {
+  const url = document.getElementById('shopee-url').value.trim();
+  if (!url) return;
+  const btn = document.getElementById('scrape-btn');
+  const errEl = document.getElementById('scrape-error');
+  btn.disabled = true; btn.textContent = '⏳';
+  errEl.classList.add('hidden');
+
+  try {
+    const resp = await fetch('/api/scrape', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url})
+    });
+    const data = await resp.json();
+    if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
+    productData = data;
+    showProduct(data);
+  } catch(e) {
+    errEl.textContent = 'Lỗi kết nối server. Thử lại!';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Cào';
+  }
+}
+
+function showProduct(p) {
+  document.getElementById('prod-name').textContent = p.name;
+  document.getElementById('prod-price').textContent = p.price || 'Xem trang';
+  document.getElementById('prod-commission').textContent = p.commission || 'Xem dashboard';
+  document.getElementById('prod-rating').textContent = p.rating || '';
+  document.getElementById('prod-sold').textContent = p.sold || '';
+  if (p.image) {
+    const img = document.getElementById('prod-img');
+    img.src = p.image;
+    img.classList.remove('hidden');
+    document.getElementById('prod-img-placeholder').classList.add('hidden');
+  }
+  document.getElementById('product-preview').classList.remove('hidden');
+}
+
+async function generateContent() {
+  if (!productData) { alert('Vui lòng cào sản phẩm trước!'); return; }
+  const affiliateLink = document.getElementById('affiliate-link').value.trim() || '[link affiliate của bạn]';
+  const btn = document.getElementById('gen-btn');
+  const loading = document.getElementById('gen-loading');
+  const output = document.getElementById('ai-output');
+
+  btn.disabled = true;
+  loading.classList.remove('hidden');
+  output.textContent = '';
+
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({product: productData, platform: currentPlatform, affiliate_link: affiliateLink})
+    });
+    const data = await resp.json();
+    if (data.error) { output.textContent = 'Lỗi: ' + data.error; return; }
+    output.textContent = data.content;
+    addHistory(currentPlatform, data.content);
+  } catch(e) {
+    output.textContent = 'Lỗi kết nối. Thử lại!';
+  } finally {
+    btn.disabled = false;
+    loading.classList.add('hidden');
+  }
+}
+
+function addHistory(platform, content) {
+  history.unshift({platform, content, time: new Date().toLocaleTimeString('vi-VN')});
+  if (history.length > 5) history.pop();
+  const list = document.getElementById('history-list');
+  list.innerHTML = history.map((h,i) => `
+    <div class="history-item" onclick="loadHistory(${i})">
+      <div class="history-platform">${h.platform} • ${h.time}</div>
+      <div class="history-content">${h.content.slice(0,80)}...</div>
+    </div>`).join('');
+}
+
+function loadHistory(i) {
+  document.getElementById('ai-output').textContent = history[i].content;
+}
+
+function copyContent() {
+  const text = document.getElementById('ai-output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const msg = document.getElementById('copy-success');
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 2000);
+  });
+}
+
+function buildSchedule() {
+  const hot = HOT_HOURS[currentPlatform] || [];
+  const grid = document.getElementById('schedule-grid');
+  grid.innerHTML = '';
+  DAYS.forEach((day, di) => {
+    const col = document.createElement('div');
+    col.className = 'day-col';
+    col.innerHTML = `<div class="day-label">${day}</div>`;
+    ALL_TIMES.forEach(t => {
+      const isHot = hot.includes(t);
+      const slot = document.createElement('div');
+      slot.className = 'time-slot' + (isHot ? ' hot' : '');
+      slot.textContent = t.slice(0,5);
+      slot.onclick = () => {
+        document.querySelectorAll('.time-slot.selected').forEach(s => s.classList.remove('selected'));
+        slot.classList.add('selected');
+        selectedSchedule = `${day} ${t}`;
+        document.getElementById('selected-time-label').textContent = `${day} lúc ${t}`;
+        document.getElementById('selected-time-box').classList.remove('hidden');
+        document.getElementById('schedule-confirm').classList.add('hidden');
+      };
+      col.appendChild(slot);
+    });
+    grid.appendChild(col);
+  });
+}
+
+function confirmSchedule() {
+  const confirm = document.getElementById('schedule-confirm');
+  confirm.textContent = `✓ Đã lưu lịch đăng ${currentPlatform} vào ${selectedSchedule}!`;
+  confirm.classList.remove('hidden');
+  setTimeout(() => confirm.classList.add('hidden'), 3000);
+}
+
+buildSchedule();
+</script>
+</body>
+</html>
