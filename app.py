@@ -270,6 +270,7 @@ def scrape_shopee_html(url):
 
         # Tìm thêm ảnh từ tất cả og:image (Shopee đôi khi có nhiều)
         all_og_imgs = [t["content"] for t in soup.find_all("meta", property="og:image") if t.get("content")]
+        print(f"[html-scrape] og_imgs={len(all_og_imgs)}")
 
         # 2. window.__INITIAL_STATE__
         for script in soup.find_all("script"):
@@ -328,12 +329,38 @@ def scrape_shopee_html(url):
             r'https://down-vn\.img\.susercontent\.com/file/[a-f0-9]{32}', html_text
         )))[:12]
 
+        # 4b. Tìm mảng hash ảnh dạng JSON ["aabbcc...32chars", ...] trong <script>
+        if len(cdn_imgs) < 2:
+            hash_imgs = []
+            # Tìm "images":["<32hexchar>", ...] trong script tags
+            for script in soup.find_all("script"):
+                script_text = script.string or ""
+                matches = re.findall(r'"images"\s*:\s*\[([^\]]+)\]', script_text)
+                for match in matches:
+                    hashes = re.findall(r'"([a-f0-9]{32})"', match)
+                    for h in hashes:
+                        url = f"https://down-vn.img.susercontent.com/file/{h}"
+                        if url not in hash_imgs:
+                            hash_imgs.append(url)
+            # Cũng quét trong toàn bộ html_text (Shopee có thể nhúng trong inline JSON)
+            if len(hash_imgs) < 2:
+                all_matches = re.findall(r'"images"\s*:\s*\[([^\]]{10,500})\]', html_text)
+                for match in all_matches:
+                    hashes = re.findall(r'"([a-f0-9]{32})"', match)
+                    for h in hashes:
+                        url = f"https://down-vn.img.susercontent.com/file/{h}"
+                        if url not in hash_imgs:
+                            hash_imgs.append(url)
+            if hash_imgs:
+                cdn_imgs = hash_imgs[:12]
+
         # 5. Fallback cuối: title + OG
         title = soup.find("title")
         name = title.get_text(strip=True).replace(" | Shopee Việt Nam", "") if title else ""
         if og_title and not name:
             name = og_title.get("content", "").replace(" | Shopee Việt Nam", "")
         all_imgs = cdn_imgs or all_og_imgs
+        print(f"[html-scrape] cdn_imgs={len(cdn_imgs)} all_og_imgs={len(all_og_imgs)} total={len(all_imgs)}")
         return {
             "name": name,
             "price": og_price_tag["content"] + "đ" if og_price_tag else "",
