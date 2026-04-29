@@ -204,7 +204,8 @@ def scrape_shopee_api(shop_id, item_id):
                 continue
 
             images = item.get("images", [])
-            image_url = f"https://down-vn.img.susercontent.com/file/{images[0]}" if images else ""
+            all_images = [f"https://down-vn.img.susercontent.com/file/{img}" for img in images[:12]]
+            image_url = all_images[0] if all_images else ""
 
             price_raw = item.get("price", 0) or item.get("price_min", 0) or 0
             price = int(price_raw) // 100000
@@ -226,6 +227,7 @@ def scrape_shopee_api(shop_id, item_id):
                 "name": item.get("name", ""),
                 "price": price_str,
                 "image": image_url,
+                "images": all_images,
                 "rating": f"⭐ {float(rating):.1f}" if rating else "",
                 "sold": f"{sold_str} đã mua" if sold else "",
                 "commission": commission,
