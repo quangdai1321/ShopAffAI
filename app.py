@@ -44,16 +44,32 @@ def save_cookies(spc_ec, spc_f):
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "application/json",
-    "Accept-Language": "vi-VN,vi;q=0.9",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
     "Accept-Encoding": "gzip, deflate, br",
     "Connection": "keep-alive",
     "Referer": "https://shopee.vn/",
+    "Origin": "https://shopee.vn",
     "X-Requested-With": "XMLHttpRequest",
     "X-Api-Source": "pc",
     "X-Shopee-Language": "vi",
     "af-ac-enc-dat": "null",
+    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
 }
+
+def get_headers(with_cookies=True):
+    h = dict(HEADERS)
+    if with_cookies:
+        cookies = get_cookies()
+        cookie_str = "; ".join(f"{k}={v}" for k, v in cookies.items() if v)
+        if cookie_str:
+            h["Cookie"] = cookie_str
+    return h
 
 BIG_BRANDS = [
     "vinamilk", "th true", "milo", "nestl",
@@ -115,7 +131,7 @@ def extract_shopee_ids(url):
 
 def resolve_short_url(url):
     try:
-        resp = requests.get(url, headers=HEADERS, allow_redirects=True, timeout=10)
+        resp = requests.get(url, headers=get_headers(with_cookies=False), allow_redirects=True, timeout=10)
         return resp.url
     except:
         return url
@@ -144,10 +160,11 @@ def scrape_shopee_api(shop_id, item_id):
         f"https://shopee.vn/api/v4/item/get?itemid={item_id}&shopid={shop_id}",
         f"https://shopee.vn/api/v2/item/get?itemid={item_id}&shopid={shop_id}",
         f"https://shopee.vn/api/v4/pdp/get_pc?item_id={item_id}&shop_id={shop_id}",
+        f"https://shopee.vn/api/v4/item/get?itemid={item_id}&shopid={shop_id}&need_deleted_subitems=1",
     ]
     for url in endpoints:
         try:
-            resp = requests.get(url, headers=HEADERS, cookies=get_cookies(), timeout=12)
+            resp = requests.get(url, headers=get_headers(), cookies=get_cookies(), timeout=12)
             raw = resp.json()
             # v4 format
             item = raw.get("data") or raw.get("item") or {}
@@ -195,8 +212,8 @@ def scrape_shopee_html(url):
     try:
         clean_url = url.split("?")[0]
         session = requests.Session()
-        session.headers.update(HEADERS)
-        session.cookies.update(SHOPEE_COOKIES)
+        session.headers.update(get_headers())
+        session.cookies.update(get_cookies())
         resp = session.get(clean_url, timeout=15)
         soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -277,7 +294,7 @@ def scrape():
         url = resolve_short_url(url)
 
     shop_id, item_id = extract_shopee_ids(url)
-    print(f"Extracted: shop_id={shop_id}, item_id={item_id}")
+    print(f"Extracted: shop_id={shop_id}, item_id={item_id}, url={url[:80]}")
 
     product = None
     if shop_id and item_id:
@@ -286,7 +303,10 @@ def scrape():
         print("API failed, trying HTML scrape...")
         product = scrape_shopee_html(url)
     if not product:
-        return jsonify({"error": "Không thể đọc sản phẩm. Thử paste link dạng shopee.vn/product/..."}), 400
+        hint = ""
+        if not shop_id:
+            hint = " (không tìm được shop_id từ link)"
+        return jsonify({"error": f"Không thể đọc sản phẩm từ Shopee{hint}. Server cloud bị Shopee hạn chế — hãy cập nhật cookie mới tại ⚙️ Cookie"}), 400
 
     product["url"] = url
     print(f"Result: {product}")
