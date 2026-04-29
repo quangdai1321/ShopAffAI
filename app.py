@@ -92,10 +92,11 @@ HOT_HOURS = {
 PLATFORM_PROMPTS = {
     "TikTok": """Viết caption TikTok affiliate cho sản phẩm Shopee theo cấu trúc:
 
-[HOOK] — 1 câu đầu gây sốc hoặc gây tò mò cực mạnh (KHÔNG hỏi, phải khẳng định)
-[PROOF] — 1-2 câu nêu lợi ích thực tế / con số cụ thể
+[HOOK] — 1 câu đầu gây tò mò cực mạnh (KHÔNG hỏi, phải khẳng định)
+[PROOF] — 1-2 câu lợi ích thực tế, ngắn gọn
 [CTA] — "Link trong bio 👇" hoặc "Bình luận LINK mình gửi ngay"
-[HASHTAG] — 5-7 hashtag: mix #fyp #shopee + hashtag niche sản phẩm
+[LINK] — Dòng riêng: "🛒 [link affiliate]"
+[HASHTAG] — 5-7 hashtag: mix #fyp #shopee + hashtag niche
 
 Yêu cầu: tổng 50-70 từ, giọng gen Z, emoji đúng chỗ, không sáo rỗng
 CHỈ trả về caption, không giải thích.""",
@@ -120,8 +121,9 @@ CHỈ trả về bài đăng.""",
     "Instagram": """Viết caption Instagram affiliate theo cấu trúc:
 
 [HOOK] — 1 câu mở đầu aesthetic, lifestyle feel (có emoji)
-[VIBE] — 2-3 câu tả cảm giác / trải nghiệm dùng sản phẩm, viết như đang sống trong khoảnh khắc đó
-[CTA] — "Link in bio 🔗" + gợi ý hành động (save, share, tag bạn)
+[VIBE] — 2-3 câu tả cảm giác / trải nghiệm dùng sản phẩm, tự nhiên như đang sống trong khoảnh khắc đó
+[LINK] — Dòng riêng: "🔗 [link affiliate]" (không được bỏ qua dòng này)
+[CTA] — "Save lại để không quên nhé!" hoặc "Tag bạn cùng xem 👇"
 [HASHTAG] — 10-12 hashtag: mix trending + niche + tiếng Việt
 
 Yêu cầu: 70-90 từ, giọng nhẹ nhàng cuốn hút, không quảng cáo lộ liễu
